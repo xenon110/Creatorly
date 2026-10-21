@@ -1,0 +1,438 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --animate-marquee: marquee var(--duration) infinite linear;
+  --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-100% - var(--gap))); }
+}
+
+@keyframes marquee-vertical {
+  from { transform: translateY(0); }
+  to { transform: translateY(calc(-100% - var(--gap))); }
+}
+
+/* ─────────────────────────────────────────────────────
+   Creatorly Design System — Redesigned by a Senior UX Eye
+   Philosophy: Warm charcoal + cream + one tasteful accent.
+   Typography-first. Restraint over decoration.
+────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+:root {
+  /* Primary: Warm Charcoal-based palette */
+  --accent-primary: #1A1A1A;
+  --accent-hover: #333333;
+  --accent-dark: #0D0D0D;
+  --accent-subtle: #F5F3F0;
+  --accent-border: #E8E4DF;
+  --accent-glow: rgba(26, 26, 26, 0.12);
+
+  /* Brand accent — a warm, confident coral-amber. Not blue, not neon. */
+  --brand: #E8643A;
+  --brand-hover: #D4572F;
+  --brand-subtle: #FEF4F0;
+  --brand-border: #F5CFC0;
+
+  /* Legacy aliases — mapped to new system */
+  --color-indigo: #1A1A1A;
+  --color-indigo-dark: #0D0D0D;
+  --color-indigo-hover: #333333;
+  --color-indigo-subtle: #F5F3F0;
+  --color-indigo-border: #E8E4DF;
+  --color-purple: #1A1A1A;
+  --color-purple-dark: #0D0D0D;
+  --color-emerald: #1A1A1A;
+
+  /* Secondary accents — muted, purposeful */
+  --accent-teal: #2A9D8F;
+  --accent-cyan: #457B9D;
+  --accent-amber: #E9C46A;
+
+  /* Surfaces — warm cream-whites, not clinical blue-grays */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #FAFAF8;
+  --bg-tertiary: #F5F3F0;
+  --bg-elevated: #FFFFFF;
+  --bg-warm: #FAF8F5;
+
+  /* Typography — rich, legible, warm */
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B6560;
+  --text-muted: #9B9590;
+  --text-inverted: #FFFFFF;
+
+  /* Functional colors — softer, less alarming */
+  --success: #2A9D8F;
+  --success-dark: #21867A;
+  --success-bg: #F0FAF8;
+  --success-border: #B8E6DF;
+  --success-text: #1A6B62;
+
+  --warning: #E9C46A;
+  --warning-bg: #FFFDF5;
+  --warning-border: #F5E6B8;
+  --warning-text: #8B6914;
+
+  --error: #E76F51;
+  --error-bg: #FEF5F2;
+  --error-border: #F5C4B8;
+  --error-text: #A34E38;
+
+  /* Metric Colors — gentler, still distinct */
+  --metric-audience: #2A9D8F;
+  --metric-audience-bg: #F0FAF8;
+  --metric-views: #457B9D;
+  --metric-views-bg: #EFF6FA;
+  --metric-eng: #E76F51;
+  --metric-eng-bg: #FEF5F2;
+
+  /* Borders — warm, not cold */
+  --border-light: #EBE8E4;
+  --border-medium: #D5D0CA;
+  --border-dark: #B0AAA2;
+
+  /* Radii — slightly softer */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadows — warm-tinted, subtle */
+  --shadow-xs: 0 1px 2px rgba(26, 26, 26, 0.04);
+  --shadow-sm: 0 2px 8px rgba(26, 26, 26, 0.04);
+  --shadow-md: 0 4px 20px rgba(26, 26, 26, 0.06);
+  --shadow-lg: 0 12px 36px rgba(26, 26, 26, 0.08);
+  --shadow-xl: 0 20px 50px -10px rgba(26, 26, 26, 0.12);
+  --shadow-brand: 0 4px 16px rgba(232, 100, 58, 0.2);
+
+  /* Typography — editorial + clean modern sans */
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  /* Layout */
+  --container-max-width: 1280px;
+  --header-height: 64px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Typography — Clean, high-impact hierarchy */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+h1 {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  outline: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Container — narrower for better readability */
+.container {
+  width: 100%;
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 0 16px;
+  }
+}
+
+/* Button System — Refined, tactile */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 24px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+}
+
+/* Primary: Charcoal — confident, not screaming */
+.btn-primary {
+  background-color: var(--accent-primary);
+  color: var(--text-inverted);
+  border: 1px solid var(--accent-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Secondary: Warm outline pill */
+.btn-secondary {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-dark);
+  transform: translateY(-1px);
+}
+
+/* Brand CTA: Coral-amber accent for key moments */
+.btn-brand {
+  background-color: var(--brand);
+  color: white;
+  border: 1px solid var(--brand);
+}
+
+.btn-brand:hover {
+  background-color: var(--brand-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-brand);
+}
+
+/* Outline primary */
+.btn-outline-primary {
+  background-color: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.btn-sm {
+  padding: 7px 16px;
+  font-size: 0.8rem;
+}
+
+.btn-lg {
+  padding: 13px 28px;
+  font-size: 0.95rem;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* Badge — minimal, warm */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  line-height: 1.4;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.badge-verified {
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
+}
+
+.badge-neutral {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+}
+
+.badge-accent {
+  background: var(--brand-subtle);
+  color: var(--brand);
+  border: 1px solid var(--brand-border);
+}
+
+/* Card — clean surfaces with warm borders */
+.card {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xs);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card:hover {
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+/* Section headers */
+.section-header {
+  margin-bottom: 32px;
+}
+
+.section-tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--brand);
+  margin-bottom: 8px;
+  display: inline-block;
+}
+
+.section-title {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  font-weight: 400;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  letter-spacing: -0.03em;
+}
+
+.section-desc {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  max-width: 560px;
+  line-height: 1.65;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(26, 26, 26, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modal-content {
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 24px 60px rgba(26, 26, 26, 0.2);
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-light);
+  position: relative;
+  animation: scaleUp 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.98); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-dark);
+}

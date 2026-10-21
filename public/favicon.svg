@@ -1,0 +1,16 @@
+<svg viewBox="0 0 200 160" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="200" height="160" rx="36" fill="#f9f9f8" />
+  
+  <!-- Top Left: Green -->
+  <circle cx="75" cy="45" r="22" fill="#54c463" />
+  
+  <!-- Top Right: Orange -->
+  <circle cx="140" cy="45" r="22" fill="#ed7d1b" />
+  
+  <!-- Bottom Left: Blue -->
+  <circle cx="75" cy="110" r="22" fill="#5184f5" />
+  
+  <!-- Bottom Right: Pink -->
+  <circle cx="140" cy="110" r="22" fill="#e356a7" />
+</svg>
