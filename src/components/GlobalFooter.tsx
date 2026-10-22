@@ -8,13 +8,24 @@ interface GlobalFooterProps {
   currentCurrency: CurrencyCode;
   onCurrencyChange: (code: CurrencyCode) => void;
   onShowToast: (msg: string) => void;
+  onNavigateToPage?: (slug: string) => void;
 }
 
 export const GlobalFooter: React.FC<GlobalFooterProps> = ({
   currentCurrency,
   onCurrencyChange,
   onShowToast,
+  onNavigateToPage,
 }) => {
+  const handleLinkClick = (e: React.MouseEvent, slug: string, toastDesc: string) => {
+    e.preventDefault();
+    if (onNavigateToPage) {
+      onNavigateToPage(slug);
+    } else {
+      onShowToast(toastDesc);
+    }
+  };
+
   return (
     <footer className="global-footer">
       <div className="container footer-inner">
@@ -29,7 +40,12 @@ export const GlobalFooter: React.FC<GlobalFooterProps> = ({
             <p className="footer-brand-desc">
               The professional global marketplace connecting brands with verified tech, AI, and developer creators. Upfront pricing, audited metrics, and milestone escrow security.
             </p>
-            <div className="footer-trust-pill">
+            <div 
+              className="footer-trust-pill"
+              onClick={() => onNavigateToPage?.('how-escrow-works')}
+              style={{ cursor: 'pointer' }}
+              title="Click to view Escrow Architecture"
+            >
               <Lock size={12} className="text-success" />
               <span>Bank-Grade Escrow Protection</span>
             </div>
@@ -39,11 +55,11 @@ export const GlobalFooter: React.FC<GlobalFooterProps> = ({
           <div className="footer-col">
             <h4 className="footer-heading">Discover Creators</h4>
             <ul className="footer-links">
-              <li><a href="#technology" onClick={(e) => { e.preventDefault(); onShowToast('Browsing Technology & AI creators'); }}>Technology & AI</a></li>
-              <li><a href="#developer-tools" onClick={(e) => { e.preventDefault(); onShowToast('Browsing Developer Tools creators'); }}>Developer Tools & APIs</a></li>
-              <li><a href="#productivity" onClick={(e) => { e.preventDefault(); onShowToast('Browsing SaaS & Productivity creators'); }}>SaaS & Productivity</a></li>
-              <li><a href="#consumer-tech" onClick={(e) => { e.preventDefault(); onShowToast('Browsing Consumer Electronics creators'); }}>Consumer Electronics</a></li>
-              <li><a href="#education" onClick={(e) => { e.preventDefault(); onShowToast('Browsing STEM & Education creators'); }}>STEM & Education</a></li>
+              <li><a href="#technology" onClick={(e) => handleLinkClick(e, 'tech-ai-creators', 'Browsing Technology & AI creators')}>Technology & AI</a></li>
+              <li><a href="#developer-tools" onClick={(e) => handleLinkClick(e, 'saas-devtools-creators', 'Browsing Developer Tools creators')}>Developer Tools & APIs</a></li>
+              <li><a href="#productivity" onClick={(e) => handleLinkClick(e, 'saas-devtools-creators', 'Browsing SaaS & Productivity creators')}>SaaS & Productivity</a></li>
+              <li><a href="#consumer-tech" onClick={(e) => handleLinkClick(e, 'consumer-tech-creators', 'Browsing Consumer Electronics creators')}>Consumer Electronics</a></li>
+              <li><a href="#all-creators" onClick={(e) => handleLinkClick(e, 'all-creators', 'Browsing All Creators')}>All Vetted Creators</a></li>
             </ul>
           </div>
 
@@ -51,11 +67,11 @@ export const GlobalFooter: React.FC<GlobalFooterProps> = ({
           <div className="footer-col">
             <h4 className="footer-heading">For Brands & Agencies</h4>
             <ul className="footer-links">
-              <li><a href="#how-escrow-works" onClick={(e) => { e.preventDefault(); onShowToast('Creatorly Escrow & Milestone Protection'); }}>Escrow Protection</a></li>
-              <li><a href="#pricing-transparency" onClick={(e) => { e.preventDefault(); onShowToast('Pricing Transparency Standards'); }}>Pricing Standards</a></li>
-              <li><a href="#usage-rights" onClick={(e) => { e.preventDefault(); onShowToast('Organic vs Paid Ad Licensing Guide'); }}>Commercial Licensing</a></li>
-              <li><a href="#case-studies" onClick={(e) => { e.preventDefault(); onShowToast('Browsing Brand Case Studies'); }}>Brand Case Studies</a></li>
-              <li><a href="#enterprise" onClick={(e) => { e.preventDefault(); onShowToast('Creatorly Enterprise & Managed Campaigns'); }}>Enterprise Solutions</a></li>
+              <li><a href="#how-escrow-works" onClick={(e) => handleLinkClick(e, 'how-escrow-works', 'Creatorly Escrow & Milestone Protection')}>Escrow Protection</a></li>
+              <li><a href="#pricing-transparency" onClick={(e) => handleLinkClick(e, 'creator-standards', 'Pricing Transparency Standards')}>Pricing Standards</a></li>
+              <li><a href="#usage-rights" onClick={(e) => handleLinkClick(e, 'creator-standards', 'Commercial Licensing Standards')}>Commercial Licensing</a></li>
+              <li><a href="#case-studies" onClick={(e) => handleLinkClick(e, 'about-creatorly', 'Creatorly Manifesto & Mission')}>Brand Manifesto</a></li>
+              <li><a href="#enterprise" onClick={(e) => handleLinkClick(e, 'agency-partnerships', 'Agency Partnerships')}>Enterprise Solutions</a></li>
             </ul>
           </div>
 
@@ -63,11 +79,11 @@ export const GlobalFooter: React.FC<GlobalFooterProps> = ({
           <div className="footer-col">
             <h4 className="footer-heading">Trust & Creator Resources</h4>
             <ul className="footer-links">
-              <li><a href="#apply" onClick={(e) => { e.preventDefault(); onShowToast('Creator Application Portal'); }}>Apply as a Creator</a></li>
-              <li><a href="#metrics-audit" onClick={(e) => { e.preventDefault(); onShowToast('How Creatorly Verifies Audience APIs'); }}>Metric Verification Standards</a></li>
-              <li><a href="#escrow-policy" onClick={(e) => { e.preventDefault(); onShowToast('Escrow & Payout Policy'); }}>Escrow & Payout Policy</a></li>
-              <li><a href="#terms" onClick={(e) => { e.preventDefault(); onShowToast('Creatorly Terms of Service'); }}>Terms of Collaboration</a></li>
-              <li><a href="#privacy" onClick={(e) => { e.preventDefault(); onShowToast('Privacy & Data Protection'); }}>Privacy Policy</a></li>
+              <li><a href="#apply" onClick={(e) => handleLinkClick(e, 'apply-creator', 'Creator Application Portal')}>Apply as a Creator</a></li>
+              <li><a href="#metrics-audit" onClick={(e) => handleLinkClick(e, 'verification-protocol', 'How Creatorly Verifies Audience APIs')}>Metric Verification Standards</a></li>
+              <li><a href="#fellowship" onClick={(e) => handleLinkClick(e, 'creator-fellowship', 'Creator Fellowship Cohorts')}>Creator Fellowship</a></li>
+              <li><a href="#terms" onClick={(e) => handleLinkClick(e, 'creator-standards', 'Creatorly Code of Conduct')}>Creator Standards</a></li>
+              <li><a href="#press" onClick={(e) => handleLinkClick(e, 'press-media-kit', 'Press & Brand Kit')}>Press & Brand Kit</a></li>
             </ul>
           </div>
         </div>

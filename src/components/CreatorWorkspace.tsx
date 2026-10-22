@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { 
   CreatorProfile, 
   CurrencyCode, 
@@ -30,8 +30,6 @@ import {
   Copy,
   Plus,
   ArrowRight,
-  MapPin,
-  Globe2,
   Crown,
   Sprout,
   BookmarkCheck,
@@ -40,17 +38,15 @@ import {
   Send,
   Eye,
   Check,
-  DollarSign,
   ShieldCheck,
-  Sparkles,
   TrendingUp,
-  CheckCircle,
-  Users,
-  Clock,
-  Lightbulb,
-  Play,
   Star,
-  Compass
+  Trash2,
+  Edit2,
+  Download,
+  RefreshCw,
+  CheckCircle2,
+  UploadCloud
 } from 'lucide-react';
 
 interface CreatorWorkspaceProps {
@@ -60,6 +56,7 @@ interface CreatorWorkspaceProps {
   onViewPublicProfile: () => void;
   onSelectCreator?: (creator: CreatorProfile) => void;
   onUpdateRequests?: (updated: CollaborationRequest[]) => void;
+  onUpdateCreator?: (updatedCreator: CreatorProfile) => void;
   onShowToast: (msg: string) => void;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
@@ -78,6 +75,26 @@ export type WorkspaceTab =
   | 'performance'
   | 'settings';
 
+interface CalendarEventItem {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  brand: string;
+  type: 'shooting' | 'review' | 'publish' | 'deadline' | 'blackout';
+  status: 'confirmed' | 'pending' | 'completed' | 'blocked';
+}
+
+interface PayoutTransaction {
+  id: string;
+  brandOrTarget: string;
+  description: string;
+  date: string;
+  amountINR: number;
+  type: 'escrow_received' | 'withdrawal' | 'bonus';
+  status: 'Completed' | 'Processing' | 'Held in Escrow';
+  invoiceRef?: string;
+}
+
 export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
   creator: initialCreator,
   currentCurrency,
@@ -86,36 +103,67 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
   onShowToast,
   currentUser: _currentUser,
   onLogout,
-  onSwitchToMarketplace
+  onSwitchToMarketplace,
+  onUpdateRequests,
+  onUpdateCreator
 }) => {
   // Navigation & UI State
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('home');
-  const [overviewSubTab, setOverviewSubTab] = useState<'overview' | 'content' | 'services' | 'reviews' | 'analytics' | 'settings'>('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [tiersModalOpen, setTiersModalOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
 
-  // Creator Profile State (Editable)
+  // 1. Creator Profile State (Editable)
   const [creator, setCreator] = useState<CreatorProfile>(initialCreator);
+  const [editAvatarUrl, setEditAvatarUrl] = useState(initialCreator.avatarUrl);
+  const [newSubNicheInput, setNewSubNicheInput] = useState('');
+
+  // 2. Collaboration Requests State
   const [collaborationRequests, setCollaborationRequests] = useState<CollaborationRequest[]>(initialRequests);
-
-
-
-  // Modals inside sub-views
-  const [addPortfolioModalOpen, setAddPortfolioModalOpen] = useState(false);
-  const [addServiceModalOpen, setAddServiceModalOpen] = useState(false);
+  const [requestStatusFilter, setRequestStatusFilter] = useState<string>('all');
+  const [requestSearchQuery, setRequestSearchQuery] = useState('');
   const [selectedRequestForDetail, setSelectedRequestForDetail] = useState<CollaborationRequest | null>(null);
+
+  // Request Action Modals
   const [counterOfferModalOpen, setCounterOfferModalOpen] = useState(false);
   const [counterAmount, setCounterAmount] = useState<number>(12000);
   const [counterNote, setCounterNote] = useState('');
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState('Schedule is currently at capacity.');
+  const [submitDraftModalOpen, setSubmitDraftModalOpen] = useState(false);
+  const [draftUrl, setDraftUrl] = useState('');
+  const [draftNotes, setDraftNotes] = useState('');
 
-  // Message thread state
+  // 3. Content & Portfolio State
+  const [portfolioFormatFilter, setPortfolioFormatFilter] = useState<string>('all');
+  const [portfolioSearch, setPortfolioSearch] = useState('');
+  const [addPortfolioModalOpen, setAddPortfolioModalOpen] = useState(false);
+  const [newPortTitle, setNewPortTitle] = useState('');
+  const [newPortClient, setNewPortClient] = useState('');
+  const [newPortFormat, setNewPortFormat] = useState('YouTube Integration');
+  const [newPortUrl, setNewPortUrl] = useState('');
+  const [newPortViews, setNewPortViews] = useState(15400);
+  const [newPortEngagement, setNewPortEngagement] = useState(6.2);
+  const [newPortDeliverable, setNewPortDeliverable] = useState('');
+  const [newPortThumb] = useState('/images/work-ai-coding.jpg');
+
+  // 4. Services & Pricing State
+  const [servicePlatformFilter, setServicePlatformFilter] = useState<string>('all');
+  const [addServiceModalOpen, setAddServiceModalOpen] = useState(false);
+  const [editingPackage, setEditingPackage] = useState<ServicePackage | null>(null);
+  const [pkgTitle, setPkgTitle] = useState('');
+  const [pkgPrice, setPkgPrice] = useState(15000);
+  const [pkgDays, setPkgDays] = useState(5);
+  const [pkgPlatform, setPkgPlatform] = useState('YouTube');
+  const [pkgTagline, setPkgTagline] = useState('');
+  const [pkgDeliverablesText, setPkgDeliverablesText] = useState('1 Dedicated high-energy video segment\n1 Round of script review\nPinned trackable discount link');
+
+  // 5. Messages & Chat State
   const [activeConversationId, setActiveConversationId] = useState<string>('c-1');
   const [chatReplyText, setChatReplyText] = useState('');
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [conversations, setConversations] = useState([
     {
       id: 'c-1',
@@ -159,6 +207,63 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
     }
   ]);
 
+  // 6. Availability & Calendar State
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string>('2026-10-28');
+  const [calendarMonth, setCalendarMonth] = useState<'october' | 'november'>('october');
+  const [addEventModalOpen, setAddEventModalOpen] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newEventBrand, setNewEventBrand] = useState('');
+  const [newEventDate, setNewEventDate] = useState('2026-10-29');
+  const [newEventType, setNewEventType] = useState<'shooting' | 'review' | 'publish' | 'deadline' | 'blackout'>('shooting');
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([
+    { id: 'ev-1', date: '2026-10-24', title: 'Script Outline Due', brand: 'SuperAI Labs', type: 'deadline', status: 'pending' },
+    { id: 'ev-2', date: '2026-10-28', title: 'Film Studio Shoot', brand: 'UrbanThreads', type: 'shooting', status: 'confirmed' },
+    { id: 'ev-3', date: '2026-11-05', title: 'YouTube Video Goes Live', brand: 'SuperAI Labs', type: 'publish', status: 'confirmed' },
+    { id: 'ev-4', date: '2026-11-12', title: 'Warp Terminal Review Draft', brand: 'DevToolbox Cloud', type: 'review', status: 'pending' },
+    { id: 'ev-5', date: '2026-11-15', title: 'Blocked for Tech Summit', brand: 'Personal', type: 'blackout', status: 'blocked' },
+    { id: 'ev-6', date: '2026-10-16', title: 'Sponsored Reel Delivered', brand: 'NextLearn AI', type: 'publish', status: 'completed' }
+  ]);
+
+  // 7. Earnings & Payouts State
+  const [lifetimeEarnedINR, setLifetimeEarnedINR] = useState(142000);
+  const [availablePayoutINR, setAvailablePayoutINR] = useState(28500);
+  const [escrowHeldINR, setEscrowHeldINR] = useState(14500);
+  const [payoutModalOpen, setPayoutModalOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState(25000);
+  const [payoutMethod, setPayoutMethod] = useState<'bank' | 'upi'>('bank');
+  const [payoutTransactions, setPayoutTransactions] = useState<PayoutTransaction[]>([
+    { id: 'tx-1', brandOrTarget: 'NextLearn AI', description: 'Sponsored Reel (Delivered & Approved)', date: 'Oct 17, 2026', amountINR: 8500, type: 'escrow_received', status: 'Completed', invoiceRef: 'INV-2026-904' },
+    { id: 'tx-2', brandOrTarget: 'MinimalGear', description: 'UGC Ad Creative & Commercial Rights', date: 'Oct 04, 2026', amountINR: 6000, type: 'escrow_received', status: 'Completed', invoiceRef: 'INV-2026-881' },
+    { id: 'tx-3', brandOrTarget: 'Bank Withdrawal (HDFC)', description: 'Direct bank payout to *******4920', date: 'Sep 28, 2026', amountINR: 40000, type: 'withdrawal', status: 'Completed', invoiceRef: 'PAY-2026-419' }
+  ]);
+
+  // 8. Performance & API Sync State
+  const [apiSyncState, setApiSyncState] = useState({
+    youtube: 'Synced 3 hours ago',
+    meta: 'Synced 3 hours ago',
+    linkedin: 'Synced 1 day ago'
+  });
+  const [syncingApi, setSyncingApi] = useState<string | null>(null);
+
+  // 9. Settings Sub-tabs State
+  const [settingsSubTab, setSettingsSubTab] = useState<'account' | 'payout' | 'notifications' | 'tier'>('account');
+  const [bankSettings, setBankSettings] = useState({
+    accountName: 'Alex Sharma',
+    bankName: 'HDFC Bank, Bandra West Branch, Mumbai',
+    accountNumber: '50100482914920',
+    ifsc: 'HDFC0000128',
+    upiId: 'alexsharma@okaxis',
+    pan: 'ABCPS1290K',
+    gstin: '27ABCPS1290K1Z5'
+  });
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    proposalEmail: true,
+    escrowAlerts: true,
+    whatsappUrgent: true,
+    weeklyDigest: false
+  });
+  const [twoFactorActive, setTwoFactorActive] = useState(true);
+
   // Currency helper
   const currencyConfig = CURRENCIES[currentCurrency] || CURRENCIES.INR;
   const formatMoney = (inr: number) => {
@@ -166,8 +271,8 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
     return `${currencyConfig.symbol}${converted.toLocaleString(currencyConfig.locale)}`;
   };
 
-  // Dynamic Profile Completion Calculation
-  const calculateCompletion = () => {
+  // Profile completion calculation
+  const completionPercent = useMemo(() => {
     let score = 0;
     if (creator.fullName && creator.handle) score += 15;
     if (creator.bio && creator.bio.length > 20) score += 15;
@@ -177,104 +282,151 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
     if (creator.portfolio && creator.portfolio.length >= 3) score += 10;
     if (creator.availability?.status) score += 10;
     return Math.min(score, 100);
-  };
-  const completionPercent = calculateCompletion();
+  }, [creator]);
 
-  // Dynamic missing profile items (only populated if items are actually missing)
-  const getMissingItems = () => {
-    const items: { id: string; label: string; tab: WorkspaceTab }[] = [];
-    if (!creator.bio || creator.bio.length <= 20) {
-      items.push({ id: 'bio', label: 'Add detailed creator bio (minimum 20 characters)', tab: 'profile' });
-    }
-    if (!creator.socialLinks || creator.socialLinks.length < 2) {
-      items.push({ id: 'socials', label: 'Connect at least 2 social channel accounts', tab: 'profile' });
-    }
-    if (!creator.packages || creator.packages.length < 2) {
-      items.push({ id: 'packages', label: 'Publish at least 2 service collaboration packages', tab: 'services' });
-    }
-    if (!creator.portfolio || creator.portfolio.length < 3) {
-      items.push({ id: 'portfolio', label: `Add verified portfolio deliverables (${creator.portfolio?.length || 0}/3 completed)`, tab: 'portfolio' });
-    }
-    if (!creator.availability?.status) {
-      items.push({ id: 'availability', label: 'Set your collaboration availability status', tab: 'calendar' });
-    }
+  const missingItems = useMemo(() => {
+    const items = [];
+    if (!creator.bio || creator.bio.length < 20) items.push({ id: 'bio', label: 'Add full biography' });
+    if (creator.packages.length < 3) items.push({ id: 'packages', label: 'List at least 3 service packages' });
+    if (creator.portfolio.length < 4) items.push({ id: 'portfolio', label: 'Upload past brand integration case studies' });
     return items;
-  };
-  const missingItems = getMissingItems();
+  }, [creator]);
 
-  // Requests counter
-  const pendingRequestsCount = collaborationRequests.filter(r => r.status === 'new' || r.status === 'in_discussion').length;
-  const unreadMessagesCount = conversations.filter(c => c.unread).length;
+  // Navigation badge counts
+  const pendingRequestsCount = useMemo(() => {
+    return collaborationRequests.filter(r => r.status === 'new' || r.status === 'in_discussion').length;
+  }, [collaborationRequests]);
 
+  const unreadMessagesCount = useMemo(() => {
+    return conversations.filter(c => c.unread).length;
+  }, [conversations]);
 
-
-  // Copy Profile Link
-  const handleCopyProfileLink = () => {
-    const url = `${window.location.origin}/creators/${creator.username}`;
-    navigator.clipboard?.writeText(url);
-    onShowToast(`Public profile link copied: ${url}`);
-  };
-
-  // Accept Collaboration Request
+  // Request Handlers
   const handleAcceptRequest = (requestId: string) => {
-    setCollaborationRequests(prev => prev.map(req => {
+    const updated = collaborationRequests.map(req => {
       if (req.id === requestId) {
         return {
           ...req,
-          status: 'accepted',
-          escrowStatus: 'held',
-          pipelineStage: 'script_signoff'
+          status: 'accepted' as any,
+          escrowStatus: 'held' as any,
+          pipelineStage: 'script_signoff' as any
         };
       }
       return req;
-    }));
-    onShowToast('Request accepted! Campaign moved to Escrow & Script Signoff.');
+    });
+    setCollaborationRequests(updated);
+    onUpdateRequests?.(updated);
+    setEscrowHeldINR(prev => prev + 10000);
+    onShowToast('Request accepted! Escrow secured & moved to Script Signoff.');
     if (selectedRequestForDetail?.id === requestId) {
       setSelectedRequestForDetail(null);
     }
   };
 
-  // Decline Request
   const handleConfirmDecline = () => {
     if (!selectedRequestForDetail) return;
-    setCollaborationRequests(prev => prev.map(req => {
+    const updated = collaborationRequests.map(req => {
       if (req.id === selectedRequestForDetail.id) {
         return {
           ...req,
-          status: 'declined',
+          status: 'declined' as any,
           creatorNotes: declineReason
         };
       }
       return req;
-    }));
+    });
+    setCollaborationRequests(updated);
+    onUpdateRequests?.(updated);
     onShowToast(`Request from ${selectedRequestForDetail.brandName} declined.`);
     setDeclineModalOpen(false);
     setSelectedRequestForDetail(null);
   };
 
-  // Submit Counteroffer
   const handleSubmitCounter = () => {
     if (!selectedRequestForDetail) return;
-    setCollaborationRequests(prev => prev.map(req => {
+    const updated = collaborationRequests.map(req => {
       if (req.id === selectedRequestForDetail.id) {
         return {
           ...req,
-          status: 'in_discussion',
+          status: 'in_discussion' as any,
+          budgetINR: counterAmount,
           counterOfferINR: counterAmount,
           counterOfferNotes: counterNote
         };
       }
       return req;
-    }));
+    });
+    setCollaborationRequests(updated);
+    onUpdateRequests?.(updated);
     onShowToast(`Counteroffer of ${formatMoney(counterAmount)} sent to ${selectedRequestForDetail.brandName}.`);
     setCounterOfferModalOpen(false);
     setSelectedRequestForDetail(null);
   };
 
-  // Send message in chat thread
+  const handleSubmitDraftDeliverable = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRequestForDetail) return;
+    const updated = collaborationRequests.map(req => {
+      if (req.id === selectedRequestForDetail.id) {
+        return {
+          ...req,
+          pipelineStage: 'draft_review' as any,
+          status: 'in_discussion' as any,
+          creatorNotes: `Draft URL submitted: ${draftUrl}`
+        };
+      }
+      return req;
+    });
+    setCollaborationRequests(updated);
+    onUpdateRequests?.(updated);
+    onShowToast(`Deliverable draft submitted to ${selectedRequestForDetail.brandName} for review!`);
+    setSubmitDraftModalOpen(false);
+    setDraftUrl('');
+    setDraftNotes('');
+    setSelectedRequestForDetail(null);
+  };
+
+  const handleMarkDealComplete = (req: CollaborationRequest) => {
+    const updated = collaborationRequests.map(r => {
+      if (r.id === req.id) {
+        return {
+          ...r,
+          status: 'completed' as any,
+          pipelineStage: 'completed' as any,
+          escrowStatus: 'released' as any
+        };
+      }
+      return r;
+    });
+    setCollaborationRequests(updated);
+    onUpdateRequests?.(updated);
+    setAvailablePayoutINR(prev => prev + req.budgetINR);
+    setLifetimeEarnedINR(prev => prev + req.budgetINR);
+    setEscrowHeldINR(prev => Math.max(0, prev - req.budgetINR));
+    
+    // Add transaction
+    const newTx: PayoutTransaction = {
+      id: `tx-${Date.now()}`,
+      brandOrTarget: req.brandName,
+      description: `${req.serviceTitle} (Approved & Completed)`,
+      date: 'Today',
+      amountINR: req.budgetINR,
+      type: 'escrow_received',
+      status: 'Completed',
+      invoiceRef: `INV-${Date.now().toString().slice(-4)}`
+    };
+    setPayoutTransactions(prev => [newTx, ...prev]);
+    onShowToast(`Deal with ${req.brandName} completed! ${formatMoney(req.budgetINR)} released to your available payout balance.`);
+    if (selectedRequestForDetail?.id === req.id) setSelectedRequestForDetail(null);
+  };
+
+  // Chat message send
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatReplyText.trim()) return;
+    const sentText = chatReplyText.trim();
+    setChatReplyText('');
+
     setConversations(prev => prev.map(conv => {
       if (conv.id === activeConversationId) {
         return {
@@ -282,21 +434,79 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
           unread: false,
           messages: [
             ...conv.messages,
-            { sender: 'creator', text: chatReplyText.trim(), time: 'Just now' }
+            { sender: 'creator', text: sentText, time: 'Just now' }
           ]
         };
       }
       return conv;
     }));
-    setChatReplyText('');
     onShowToast('Message sent to brand partner.');
+
+    // Simulated reply after 800ms
+    setTimeout(() => {
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === activeConversationId) {
+          return {
+            ...conv,
+            messages: [
+              ...conv.messages,
+              { sender: 'brand', text: `Thanks Alex! Received your update regarding "${sentText.slice(0, 30)}...". Checking this with our campaign manager!`, time: 'Just now' }
+            ]
+          };
+        }
+        return conv;
+      }));
+    }, 900);
   };
 
-  // Save profile edits
+  // Withdraw payout
+  const handleConfirmPayout = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (withdrawAmount <= 0 || withdrawAmount > availablePayoutINR) {
+      onShowToast('Please enter a valid withdrawal amount.');
+      return;
+    }
+    setAvailablePayoutINR(prev => prev - withdrawAmount);
+    const newTx: PayoutTransaction = {
+      id: `tx-${Date.now()}`,
+      brandOrTarget: payoutMethod === 'bank' ? 'HDFC Bank (*4920)' : `UPI (${bankSettings.upiId})`,
+      description: `Direct payout transfer via Creatorly Escrow`,
+      date: 'Today',
+      amountINR: withdrawAmount,
+      type: 'withdrawal',
+      status: 'Processing',
+      invoiceRef: `PAY-2026-${Date.now().toString().slice(-4)}`
+    };
+    setPayoutTransactions(prev => [newTx, ...prev]);
+    onShowToast(`Payout request for ${formatMoney(withdrawAmount)} initiated! Arriving in 2 hours.`);
+    setPayoutModalOpen(false);
+  };
+
+  // API sync simulation
+  const handleSyncApi = (platform: 'youtube' | 'meta' | 'linkedin') => {
+    setSyncingApi(platform);
+    setTimeout(() => {
+      setSyncingApi(null);
+      setApiSyncState(prev => ({
+        ...prev,
+        [platform]: 'Synced just now'
+      }));
+      onShowToast(`${platform.toUpperCase()} API refreshed! Live reach and engagement updated.`);
+    }, 1000);
+  };
+
+  // Profile save
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    onShowToast('Profile changes saved successfully!');
+    onUpdateCreator?.(creator);
+    onShowToast('Profile changes saved successfully! Public storefront updated.');
     setActiveTab('home');
+  };
+
+  const handleCopyProfileLink = () => {
+    const url = `${window.location.origin}/creators/${creator.username}`;
+    navigator.clipboard?.writeText(url);
+    onShowToast(`Public profile link copied: ${url}`);
   };
 
   return (
@@ -314,13 +524,12 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
           >
             <CreatorlyLogo width={26} height={22} />
             <span className="cw-logo-text">Creatorly</span>
-            <span className="cw-logo-badge">Workspace</span>
+            <span className="cw-logo-badge">WORKSPACE</span>
           </button>
           {mobileMenuOpen && (
             <button 
-              type="button"
-              className="cw-icon-btn" 
-              style={{ color: '#FFFFFF', borderColor: 'rgba(255,255,255,0.2)' }}
+              type="button" 
+              className="cw-icon-btn"
               onClick={() => setMobileMenuOpen(false)}
             >
               <X size={18} />
@@ -349,7 +558,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
           </div>
         </div>
 
-        {/* Navigation Items (All 10 required items) */}
+        {/* Navigation Items (All 10 required items exactly matching reference) */}
         <nav className="cw-sidebar-nav">
           <button
             type="button"
@@ -420,6 +629,9 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
               <MessageSquare size={17} />
               <span>Messages & Chat</span>
             </div>
+            {unreadMessagesCount > 0 && (
+              <span className="cw-nav-item-badge">{unreadMessagesCount}</span>
+            )}
           </button>
 
           <button
@@ -467,120 +679,88 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
           </button>
         </nav>
 
-        {/* Sidebar Footer */}
-        <div className="cw-sidebar-footer">
+        {/* Sidebar Footer Link */}
+        <div style={{ marginTop: 'auto', padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <button 
             type="button" 
-            className="cw-sidebar-public-btn"
+            className="cw-btn cw-btn-secondary" 
+            style={{ width: '100%', fontSize: '0.8rem', justifyContent: 'center' }}
             onClick={onViewPublicProfile}
           >
+            <Eye size={14} />
             <span>Preview Public Storefront</span>
-            <ExternalLink size={14} />
           </button>
         </div>
       </aside>
 
       {/* ───────────────────────────────────────────────────────────────────
-          2. Main Layout (Top Navigation + Workspace Viewport)
+          2. Top Navigation Bar
           ─────────────────────────────────────────────────────────────────── */}
-      <div className="cw-main-layout">
-        {/* Compact Top Navigation Bar */}
+      <div className="cw-main-content">
         <header className="cw-top-nav">
-          <div className="cw-top-left">
+          <div className="cw-top-nav-left">
             <button 
               type="button" 
-              className="cw-mobile-menu-btn"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Toggle navigation menu"
+              className="cw-mobile-menu-btn" 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               <Menu size={20} />
             </button>
-            <div className="cw-search-box">
-              <Search size={15} color="#828E86" />
+            <div className="cw-search-wrapper">
+              <Search size={16} className="cw-search-icon" />
               <input 
                 type="text" 
                 placeholder="Search opportunities, brands, briefs..." 
-                className="cw-search-input"
+                className="cw-search-box"
               />
             </div>
           </div>
 
-          <div className="cw-top-right">
-            {/* Live Availability Status */}
-            <div className="cw-availability-pill">
-              <span className={`cw-status-dot ${creator.availability.status === 'limited' ? 'dot-limited' : ''}`} />
+          <div className="cw-top-nav-right">
+            {/* Availability Quick Status Indicator */}
+            <div 
+              className="cw-availability-pill" 
+              title="Click to toggle availability"
+              onClick={() => setActiveTab('calendar')}
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="cw-availability-dot" />
               <span>Available for Collaborations</span>
             </div>
 
-            {/* Notifications */}
-            <div style={{ position: 'relative' }}>
-              <button 
-                type="button" 
-                className="cw-icon-btn"
-                onClick={() => setNotificationsOpen(!notificationsOpen)}
-                aria-label="View notifications"
-              >
-                <Bell size={17} />
-                <span className="cw-unread-dot" />
-              </button>
-
-              {notificationsOpen && (
-                <div className="cw-dropdown-menu" style={{ width: 320, padding: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid #E5E8E4' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Notifications</span>
-                    <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>Mark all read</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: '0.8rem', padding: '6px 8px', background: '#F8F7F2', borderRadius: 6 }}>
-                      <strong>SuperAI Labs</strong> sent a revision inquiry for YouTube Integration.
-                      <div style={{ fontSize: '0.7rem', color: '#828E86', marginTop: 2 }}>12m ago</div>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', padding: '6px 8px', background: '#F8F7F2', borderRadius: 6 }}>
-                      <strong>Escrow Payout</strong> of ₹8,500 has been released to your account.
-                      <div style={{ fontSize: '0.7rem', color: '#828E86', marginTop: 2 }}>Yesterday</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Help & Guide */}
+            {/* Notification Bell */}
             <button 
               type="button" 
-              className="cw-icon-btn"
-              onClick={() => setHelpModalOpen(true)}
-              aria-label="Help and documentation"
-              title="Creatorly Creator Guide"
+              className="cw-top-icon-btn" 
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
+              title="Notifications"
             >
-              <HelpCircle size={17} />
+              <Bell size={18} />
+              {pendingRequestsCount > 0 && <span className="cw-notif-dot" />}
             </button>
 
-            {/* Quick Switch to Storefront */}
+            {/* Help / Guide button */}
             <button 
               type="button" 
-              className="cw-storefront-btn"
-              onClick={onViewPublicProfile}
-              title="Return to Alex Sharma Storefront"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '6px 12px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                color: '#16281D',
-                background: '#F1F5F9',
-                border: '1px solid #CBD5E1',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
+              className="cw-top-icon-btn" 
+              onClick={() => setHelpModalOpen(true)}
+              title="Creator Guide"
             >
-              <span>Storefront Home</span>
+              <HelpCircle size={18} />
+            </button>
+
+            {/* Switch to Marketplace */}
+            <button 
+              type="button" 
+              className="cw-btn cw-btn-secondary cw-btn-sm"
+              onClick={onSwitchToMarketplace}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <span>Discover Marketplace</span>
               <ExternalLink size={13} />
             </button>
 
-            {/* Profile Avatar + User Dropdown */}
+            {/* User Dropdown */}
             <div className="cw-user-dropdown-container">
               <button 
                 type="button" 
@@ -593,66 +773,30 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                   className="cw-user-trigger-avatar" 
                 />
                 <span className="cw-user-trigger-name">{creator.fullName}</span>
-                <ChevronDown size={14} color="#59655E" />
+                <ChevronDown size={14} />
               </button>
 
               {userDropdownOpen && (
                 <div className="cw-dropdown-menu">
-                  <button 
-                    type="button" 
-                    className="cw-dropdown-item"
-                    onClick={() => {
-                      setUserDropdownOpen(false);
-                      onViewPublicProfile();
-                    }}
-                  >
-                    <ExternalLink size={15} />
-                    <span>My Public Profile</span>
+                  <div className="cw-dropdown-header">
+                    <strong>{creator.fullName}</strong>
+                    <span>{creator.handle}</span>
+                  </div>
+                  <button type="button" className="cw-dropdown-item" onClick={() => { setActiveTab('profile'); setUserDropdownOpen(false); }}>
+                    <User size={14} />
+                    <span>My Profile</span>
                   </button>
-                  <button 
-                    type="button" 
-                    className="cw-dropdown-item"
-                    onClick={() => {
-                      setUserDropdownOpen(false);
-                      setActiveTab('settings');
-                    }}
-                  >
-                    <Settings size={15} />
-                    <span>Account Settings</span>
+                  <button type="button" className="cw-dropdown-item" onClick={() => { setActiveTab('settings'); setUserDropdownOpen(false); }}>
+                    <Settings size={14} />
+                    <span>Workspace Settings</span>
                   </button>
-                  <button 
-                    type="button" 
-                    className="cw-dropdown-item"
-                    onClick={() => {
-                      setUserDropdownOpen(false);
-                      setTiersModalOpen(true);
-                    }}
-                  >
-                    <Crown size={15} color="#C29C5B" />
-                    <span>Reputation Tier: Elite</span>
+                  <button type="button" className="cw-dropdown-item" onClick={onViewPublicProfile}>
+                    <ExternalLink size={14} />
+                    <span>View Public Storefront</span>
                   </button>
                   <div className="cw-dropdown-divider" />
-                  <button 
-                    type="button" 
-                    className="cw-dropdown-item"
-                    onClick={() => {
-                      setUserDropdownOpen(false);
-                      onSwitchToMarketplace();
-                    }}
-                  >
-                    <Globe2 size={15} />
-                    <span>Switch to Marketplace</span>
-                  </button>
-                  <button 
-                    type="button" 
-                    className="cw-dropdown-item"
-                    style={{ color: '#E11D48' }}
-                    onClick={() => {
-                      setUserDropdownOpen(false);
-                      if (onLogout) onLogout();
-                    }}
-                  >
-                    <span>Log Out</span>
+                  <button type="button" className="cw-dropdown-item text-danger" onClick={onLogout}>
+                    <span>Sign Out</span>
                   </button>
                 </div>
               )}
@@ -661,20 +805,19 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
         </header>
 
         {/* ───────────────────────────────────────────────────────────────────
-            3. Content Area: Route between Home and Workspace Sub-views
+            3. Dynamic Views Router (All 10 Tabs)
             ─────────────────────────────────────────────────────────────────── */}
-        <main className="cw-content-area">
+        <main className="cw-page-container">
           {/* =================================================================
-              HOME TAB (The First Screen after logging in as Creator)
+              TAB 1: HOME
               ================================================================= */}
           {activeTab === 'home' && (
             <div className="cw-home-view">
-              {/* Personalized Welcome Banner */}
               <div className="cw-welcome-header">
                 <div>
                   <h1 className="cw-welcome-greeting">Good afternoon, {creator.fullName.split(' ')[0]}.</h1>
                   <p className="cw-welcome-subtitle">
-                    Your creator profile is taking shape. Complete a few details to help brands discover and book your work.
+                    Your creator profile is live and verified. Oversee incoming briefs, manage milestone escrow, and track payouts.
                   </p>
                 </div>
                 <div className="cw-welcome-actions">
@@ -697,9 +840,36 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 </div>
               </div>
 
-              {/* Section A: Dynamic Profile Completion Card — only visible when profile is incomplete (< 100%) */}
+              {/* Top 4 KPI Metrics */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+                <div className="cw-card" style={{ padding: 18, cursor: 'pointer' }} onClick={() => setActiveTab('earnings')}>
+                  <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Lifetime Earned</span>
+                  <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>{formatMoney(lifetimeEarnedINR)}</div>
+                  <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>+14% this month</span>
+                </div>
+
+                <div className="cw-card" style={{ padding: 18, cursor: 'pointer' }} onClick={() => setActiveTab('earnings')}>
+                  <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Secured in Escrow</span>
+                  <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>{formatMoney(escrowHeldINR)}</div>
+                  <span style={{ fontSize: '0.72rem', color: '#59655E' }}>2 active deals protected</span>
+                </div>
+
+                <div className="cw-card" style={{ padding: 18, cursor: 'pointer' }} onClick={() => setActiveTab('requests')}>
+                  <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Pending Requests</span>
+                  <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#C29C5B', marginTop: 4 }}>{pendingRequestsCount}</div>
+                  <span style={{ fontSize: '0.72rem', color: '#C29C5B', fontWeight: 600 }}>Action needed</span>
+                </div>
+
+                <div className="cw-card" style={{ padding: 18, cursor: 'pointer' }} onClick={() => setActiveTab('performance')}>
+                  <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Profile Views</span>
+                  <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>1,420</div>
+                  <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>High brand demand</span>
+                </div>
+              </div>
+
+              {/* Dynamic Profile Completion Card */}
               {completionPercent < 100 && (
-                <div className="cw-completion-card">
+                <div className="cw-completion-card" style={{ marginBottom: 24 }}>
                   <div className="cw-completion-top">
                     <div className="cw-completion-title-group">
                       <ShieldCheck size={20} color="#16281D" />
@@ -709,10 +879,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                   </div>
 
                   <div className="cw-progress-track">
-                    <div 
-                      className="cw-progress-fill" 
-                      style={{ width: `${completionPercent}%` }} 
-                    />
+                    <div className="cw-progress-fill" style={{ width: `${completionPercent}%` }} />
                   </div>
 
                   {missingItems.length > 0 && (
@@ -728,7 +895,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
 
                   <div className="cw-completion-footer">
                     <span style={{ fontSize: '0.82rem', color: '#59655E' }}>
-                      Tip: Complete verified pricing and exclusivity to unlock higher discovery rank with enterprise brands.
+                      Tip: Verified packages and audited case studies unlock higher discovery ranking with enterprise sponsors.
                     </span>
                     <button 
                       type="button" 
@@ -744,9 +911,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
 
               {/* 2-Column Section: Collaboration Requests (Left) + Public Creator Card Preview (Right) */}
               <div className="cw-home-columns">
-                {/* Left Column: Collaboration Opportunities + Messages */}
                 <div className="cw-home-left-col">
-                  {/* Section C: Collaboration Opportunities */}
                   <div className="cw-opportunities-section">
                     <div className="cw-section-header">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -798,119 +963,71 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                             </div>
                             <div className="cw-req-detail-item">
                               <span className="cw-req-label">Escrow</span>
-                              <span className="cw-req-val" style={{ color: '#166534' }}>
-                                {request.escrowStatus === 'held' ? 'Held in Escrow' : 'Pending Signoff'}
+                              <span className="cw-req-val" style={{ color: request.escrowStatus === 'held' ? '#166534' : '#828E86' }}>
+                                {request.escrowStatus === 'held' ? 'Escrow Secured' : 'Pending Signoff'}
                               </span>
                             </div>
                           </div>
 
-                          <p className="cw-request-brief">{request.campaignBrief}</p>
+                          <p style={{ fontSize: '0.82rem', color: '#59655E', lineHeight: 1.45, margin: '10px 0 14px' }}>
+                            {request.campaignBrief}
+                          </p>
 
                           <div className="cw-request-actions">
-                            <button 
-                              type="button" 
-                              className="cw-btn cw-btn-counter cw-btn-sm"
-                              onClick={() => {
-                                setSelectedRequestForDetail(request);
-                                setCounterAmount(request.budgetINR + 2000);
-                                setCounterOfferModalOpen(true);
-                              }}
-                            >
-                              Counteroffer
-                            </button>
-                            <button 
-                              type="button" 
-                              className="cw-btn cw-btn-decline cw-btn-sm"
-                              onClick={() => {
-                                setSelectedRequestForDetail(request);
-                                setDeclineModalOpen(true);
-                              }}
-                            >
-                              Decline
-                            </button>
-                            <button 
-                              type="button" 
-                              className="cw-btn cw-btn-accept cw-btn-sm"
-                              onClick={() => handleAcceptRequest(request.id)}
-                            >
-                              <Check size={14} />
-                              <span>Accept Request</span>
-                            </button>
+                            {request.status === 'new' && (
+                              <>
+                                <button 
+                                  type="button" 
+                                  className="cw-btn cw-btn-counter cw-btn-sm"
+                                  onClick={() => {
+                                    setSelectedRequestForDetail(request);
+                                    setCounterAmount(request.budgetINR + 2000);
+                                    setCounterOfferModalOpen(true);
+                                  }}
+                                >
+                                  Counteroffer
+                                </button>
+                                <button 
+                                  type="button" 
+                                  className="cw-btn cw-btn-decline cw-btn-sm"
+                                  onClick={() => {
+                                    setSelectedRequestForDetail(request);
+                                    setDeclineModalOpen(true);
+                                  }}
+                                >
+                                  Decline
+                                </button>
+                                <button 
+                                  type="button" 
+                                  className="cw-btn cw-btn-accept cw-btn-sm"
+                                  onClick={() => handleAcceptRequest(request.id)}
+                                >
+                                  <Check size={14} />
+                                  <span>Accept Request</span>
+                                </button>
+                              </>
+                            )}
+                            {request.status === 'accepted' && (
+                              <button 
+                                type="button" 
+                                className="cw-btn cw-btn-primary cw-btn-sm"
+                                onClick={() => {
+                                  setSelectedRequestForDetail(request);
+                                  setSubmitDraftModalOpen(true);
+                                }}
+                              >
+                                <UploadCloud size={14} />
+                                <span>Submit Deliverable Draft</span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-
-                  {/* Section D: Recent Messages */}
-                  <div className="cw-card" style={{ marginBottom: 28 }}>
-                    <div className="cw-section-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <h2 className="cw-section-title">Recent Brand Messages</h2>
-                        {unreadMessagesCount > 0 && (
-                          <span className="cw-section-badge">{unreadMessagesCount} Unread</span>
-                        )}
-                      </div>
-                      <button 
-                        type="button" 
-                        className="cw-btn cw-btn-secondary cw-btn-sm"
-                        onClick={() => setActiveTab('messages')}
-                      >
-                        Open Inbox
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {conversations.map(conv => {
-                        const lastMsg = conv.messages[conv.messages.length - 1];
-                        return (
-                          <div 
-                            key={conv.id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '12px 14px',
-                              borderRadius: 10,
-                              background: '#FAF9F5',
-                              border: '1px solid #E5E8E4',
-                              cursor: 'pointer'
-                            }}
-                            onClick={() => {
-                              setActiveConversationId(conv.id);
-                              setActiveTab('messages');
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                              <img 
-                                src={conv.brandAvatar} 
-                                alt={conv.brandName} 
-                                style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} 
-                              />
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#19201C' }}>
-                                    {conv.brandName}
-                                  </span>
-                                  {conv.unread && (
-                                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#E11D48' }} />
-                                  )}
-                                </div>
-                                <span style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', maxWidth: 380, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {lastMsg.text}
-                                </span>
-                              </div>
-                            </div>
-                            <span style={{ fontSize: '0.72rem', color: '#828E86' }}>{conv.lastTimestamp}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
                 </div>
 
-                {/* Right Column: Section B - Public Creator Card Preview */}
-                {/* Right Column: Section B - Public Creator Card Preview (Dashing & Smart First Impression) */}
+                {/* Right Column: Live Public Storefront Preview Card (Dashing & Smart) */}
                 <div className="cw-home-right-col">
                   <div className="cw-creator-card-preview">
                     {/* Sleek Ambient Cover Banner */}
@@ -955,189 +1072,67 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         </div>
                       </div>
 
-                      {/* Name & Handle */}
+                      {/* Name, Verified Status & Handle */}
                       <div className="cw-creator-identity-block">
                         <div className="cw-creator-name-line">
                           <h3 className="cw-creator-card-name">{creator.fullName}</h3>
-                          <span className="cw-verified-chip" title="Verified Creator">
-                            <CheckCircle size={12} />
+                          <span className="cw-verified-chip">
+                            <Check size={11} />
                             <span>Verified</span>
                           </span>
                         </div>
                         <span className="cw-creator-card-handle">{creator.handle}</span>
                       </div>
 
-                      {/* Bio / Value Proposition */}
+                      {/* Bio Quote */}
                       <p className="cw-creator-card-bio">
                         "{creator.bio}"
                       </p>
 
-                      {/* Niche Pills (Rich filled dark colors) */}
+                      {/* Niches Pills */}
                       <div className="cw-creator-card-niches">
-                        <span className="cw-niche-tag primary">
-                          <Sparkles size={11} color="#C29C5B" />
-                          <span>{creator.primaryNiche}</span>
-                        </span>
-                        {creator.subNiches.slice(0, 3).map((niche, idx) => (
-                          <span key={idx} className="cw-niche-tag">{niche}</span>
+                        <span className="cw-creator-niche-pill active-niche">{creator.primaryNiche}</span>
+                        {creator.subNiches.slice(0, 3).map((niche, i) => (
+                          <span key={i} className="cw-creator-niche-pill">{niche}</span>
                         ))}
                       </div>
 
-                      {/* Location & Language Strip */}
-                      <div className="cw-creator-card-meta">
-                        <div className="cw-meta-pill">
-                          <MapPin size={12} />
-                          <span>{creator.location.city}, {creator.location.country} {creator.location.flagEmoji}</span>
-                        </div>
-                        <div className="cw-meta-pill">
-                          <Globe2 size={12} />
-                          <span>{creator.languages.join(', ')}</span>
-                        </div>
-                      </div>
-
-                      {/* Bento Stat Matrix 1: Trust & Performance */}
-                      <div className="cw-creator-card-stats">
-                        <div className="cw-stat-card">
-                          <div className="cw-stat-val">4.9 ★</div>
-                          <div className="cw-stat-lbl">18 Reviews</div>
-                          <span className="cw-stat-sub">100% 5-Star</span>
-                        </div>
-                        <div className="cw-stat-card">
-                          <div className="cw-stat-val">24</div>
-                          <div className="cw-stat-lbl">Collabs Done</div>
-                          <span className="cw-stat-sub">100% On-Time</span>
-                        </div>
-                        <div className="cw-stat-card">
-                          <div className="cw-stat-val">4.8%</div>
-                          <div className="cw-stat-lbl">Engagement</div>
-                          <span className="cw-stat-sub" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                            <TrendingUp size={10} />
-                            <span>3.2x Top Avg</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Bento Stat Matrix 2: Verified Platform Reach */}
-                      <div className="cw-social-reach-box">
-                        <div className="cw-reach-header">
-                          <span className="cw-reach-title">Audited Social Reach</span>
-                          <span className="cw-reach-total">85K+ Audience</span>
-                        </div>
-                        <div className="cw-creator-card-socials">
-                          <div className="cw-social-item">
-                            <span className="cw-social-num">52K</span>
-                            <span className="cw-social-type">YouTube</span>
+                      {/* 3-Cell Verified Metrics Grid */}
+                      <div className="cw-creator-metrics-3grid">
+                        <div className="cw-creator-metric-cell">
+                          <div className="cw-metric-val-row">
+                            <strong>4.9</strong>
+                            <Star size={12} color="#C29C5B" fill="#C29C5B" />
                           </div>
-                          <div className="cw-social-divider" />
-                          <div className="cw-social-item">
-                            <span className="cw-social-num">28K</span>
-                            <span className="cw-social-type">Instagram</span>
+                          <span className="cw-metric-lbl">18 Reviews</span>
+                          <span className="cw-metric-sub">100% 5-Star</span>
+                        </div>
+                        <div className="cw-creator-metric-cell">
+                          <div className="cw-metric-val-row">
+                            <strong>24</strong>
                           </div>
-                          <div className="cw-social-divider" />
-                          <div className="cw-social-item">
-                            <span className="cw-social-num">5K</span>
-                            <span className="cw-social-type">LinkedIn</span>
+                          <span className="cw-metric-lbl">Collabs Done</span>
+                          <span className="cw-metric-sub">100% On-Time</span>
+                        </div>
+                        <div className="cw-creator-metric-cell">
+                          <div className="cw-metric-val-row">
+                            <strong>4.8%</strong>
                           </div>
+                          <span className="cw-metric-lbl">Engagement</span>
+                          <span className="cw-metric-sub" style={{ color: '#15803D', fontWeight: 600 }}>↗ 3.2x Top Avg</span>
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="cw-creator-card-actions">
-                        <button 
-                          type="button" 
-                          className="cw-btn cw-btn-primary cw-btn-storefront-hero"
-                          onClick={onViewPublicProfile}
-                        >
-                          <span>Preview Full Storefront</span>
-                          <ExternalLink size={15} />
-                        </button>
-                        <button 
-                          type="button" 
-                          className="cw-btn cw-btn-secondary"
-                          onClick={() => setActiveTab('profile')}
-                        >
-                          Edit Profile Details
-                        </button>
-                      </div>
+                      {/* Action Button */}
+                      <button 
+                        type="button" 
+                        className="cw-storefront-cta-btn"
+                        onClick={onViewPublicProfile}
+                      >
+                        <span>Preview Full Storefront</span>
+                        <ExternalLink size={14} />
+                      </button>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section E: Quick Actions Bar */}
-              <div className="cw-quick-actions-section">
-                <h2 className="cw-section-title" style={{ marginBottom: 16 }}>Quick Actions</h2>
-                <div className="cw-quick-actions-grid">
-                  <div 
-                    className="cw-quick-action-card"
-                    onClick={() => setActiveTab('profile')}
-                  >
-                    <div className="cw-quick-action-icon">
-                      <User size={18} />
-                    </div>
-                    <h3 className="cw-quick-action-title">Edit Profile</h3>
-                    <p className="cw-quick-action-desc">Update bio, primary niche, and social links.</p>
-                  </div>
-
-                  <div 
-                    className="cw-quick-action-card"
-                    onClick={() => {
-                      setActiveTab('portfolio');
-                      setAddPortfolioModalOpen(true);
-                    }}
-                  >
-                    <div className="cw-quick-action-icon">
-                      <Plus size={18} />
-                    </div>
-                    <h3 className="cw-quick-action-title">Add Portfolio Item</h3>
-                    <p className="cw-quick-action-desc">Upload or link your best brand collaboration video.</p>
-                  </div>
-
-                  <div 
-                    className="cw-quick-action-card"
-                    onClick={() => {
-                      setActiveTab('services');
-                      setAddServiceModalOpen(true);
-                    }}
-                  >
-                    <div className="cw-quick-action-icon">
-                      <Tag size={18} />
-                    </div>
-                    <h3 className="cw-quick-action-title">Add a Service</h3>
-                    <p className="cw-quick-action-desc">Define a new deliverable package with set pricing.</p>
-                  </div>
-
-                  <div 
-                    className="cw-quick-action-card"
-                    onClick={() => setActiveTab('services')}
-                  >
-                    <div className="cw-quick-action-icon">
-                      <DollarSign size={18} />
-                    </div>
-                    <h3 className="cw-quick-action-title">Update Pricing</h3>
-                    <p className="cw-quick-action-desc">Adjust delivery fees, rush rates, and usage rights.</p>
-                  </div>
-
-                  <div 
-                    className="cw-quick-action-card"
-                    onClick={() => setActiveTab('calendar')}
-                  >
-                    <div className="cw-quick-action-icon">
-                      <Calendar size={18} />
-                    </div>
-                    <h3 className="cw-quick-action-title">Manage Availability</h3>
-                    <p className="cw-quick-action-desc">Toggle slots, busy periods, and expected turnaround.</p>
-                  </div>
-
-                  <div 
-                    className="cw-quick-action-card"
-                    onClick={onViewPublicProfile}
-                  >
-                    <div className="cw-quick-action-icon">
-                      <Eye size={18} />
-                    </div>
-                    <h3 className="cw-quick-action-title">View Public Profile</h3>
-                    <p className="cw-quick-action-desc">See your live public storefront exactly as brands do.</p>
                   </div>
                 </div>
               </div>
@@ -1145,7 +1140,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
           )}
 
           {/* =================================================================
-              MY PROFILE TAB (Dedicated Profile Editor)
+              TAB 2: MY PROFILE
               ================================================================= */}
           {activeTab === 'profile' && (
             <div className="cw-subview">
@@ -1153,7 +1148,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div>
                   <h1 className="cw-welcome-greeting" style={{ fontSize: '1.5rem' }}>Edit Creator Profile</h1>
                   <p className="cw-welcome-subtitle">
-                    Keep your public identity, bio, niches, and connected social media profiles up to date.
+                    Keep your public identity, bio, niches, and verified social channels up to date.
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
@@ -1174,14 +1169,41 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 28, marginTop: 20 }}>
-                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-                  {/* Personal & Public Identity */}
+              <div className="cw-profile-columns" style={{ marginTop: 24 }}>
+                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {/* Basic Identity */}
                   <div className="cw-card">
-                    <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 14 }}>Basic Identity</h3>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Basic Identity</h3>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+                      <img src={creator.avatarUrl} alt={creator.fullName} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} />
+                      <div>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Avatar Image URL</span>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input 
+                            type="text" 
+                            value={editAvatarUrl}
+                            onChange={(e) => {
+                              setEditAvatarUrl(e.target.value);
+                              setCreator({ ...creator, avatarUrl: e.target.value });
+                            }}
+                            className="cw-search-box"
+                            style={{ width: 320, fontSize: '0.82rem' }}
+                          />
+                          <button 
+                            type="button" 
+                            className="cw-btn cw-btn-secondary cw-btn-sm"
+                            onClick={() => onShowToast('Avatar updated!')}
+                          >
+                            Set Photo
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       <div>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Full Name</label>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Full Name</label>
                         <input 
                           type="text" 
                           value={creator.fullName} 
@@ -1191,7 +1213,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Public Handle</label>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Public Handle</label>
                         <input 
                           type="text" 
                           value={creator.handle} 
@@ -1203,7 +1225,18 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                     </div>
 
                     <div style={{ marginTop: 14 }}>
-                      <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Short Bio</label>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Tagline / Value Proposition</label>
+                      <input 
+                        type="text" 
+                        value={(creator as any).tagline || creator.primaryNiche} 
+                        onChange={(e) => setCreator({ ...creator, primaryNiche: e.target.value })}
+                        className="cw-search-box" 
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <div style={{ marginTop: 14 }}>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Short Biography</label>
                       <textarea 
                         rows={3} 
                         value={creator.bio}
@@ -1214,37 +1247,82 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                     </div>
                   </div>
 
-                  {/* Niches & Specialization */}
+                  {/* Niches & Specializations */}
                   <div className="cw-card">
-                    <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 14 }}>Niches & Specialization</h3>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Niches & Content Topics</h3>
                     <div style={{ marginBottom: 14 }}>
-                      <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Primary Niche</label>
-                      <input 
-                        type="text" 
-                        value={creator.primaryNiche} 
+                      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Primary Category Niche</label>
+                      <select 
+                        value={creator.primaryNiche}
                         onChange={(e) => setCreator({ ...creator, primaryNiche: e.target.value })}
-                        className="cw-search-box" 
+                        className="cw-search-box"
                         style={{ width: '100%' }}
-                      />
+                      >
+                        <option value="Tech & Developer Tools">Tech & Developer Tools</option>
+                        <option value="AI Software & Productivity">AI Software & Productivity</option>
+                        <option value="Consumer Tech & Desk Setup">Consumer Tech & Desk Setup</option>
+                        <option value="Education & Online Learning">Education & Online Learning</option>
+                        <option value="Finance & SaaS">Finance & SaaS</option>
+                      </select>
                     </div>
+
                     <div>
-                      <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Sub-Niches (Comma separated)</label>
-                      <input 
-                        type="text" 
-                        value={creator.subNiches.join(', ')} 
-                        onChange={(e) => setCreator({ ...creator, subNiches: e.target.value.split(',').map(s => s.trim()) })}
-                        className="cw-search-box" 
-                        style={{ width: '100%' }}
-                      />
+                      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Sub-Niche Tags</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                        {creator.subNiches.map((sn, idx) => (
+                          <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#FAF9F5', border: '1px solid #E5E8E4', padding: '4px 10px', borderRadius: 999, fontSize: '0.8rem', fontWeight: 600, color: '#16281D' }}>
+                            <span>{sn}</span>
+                            <button 
+                              type="button" 
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#828E86', padding: 0 }}
+                              onClick={() => setCreator({ ...creator, subNiches: creator.subNiches.filter((_, i) => i !== idx) })}
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input 
+                          type="text"
+                          placeholder="Add topic (e.g. Next.js, Cloud Dev)"
+                          value={newSubNicheInput}
+                          onChange={(e) => setNewSubNicheInput(e.target.value)}
+                          className="cw-search-box"
+                          style={{ flex: 1 }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newSubNicheInput.trim()) {
+                                setCreator({ ...creator, subNiches: [...creator.subNiches, newSubNicheInput.trim()] });
+                                setNewSubNicheInput('');
+                              }
+                            }
+                          }}
+                        />
+                        <button 
+                          type="button" 
+                          className="cw-btn cw-btn-secondary"
+                          onClick={() => {
+                            if (newSubNicheInput.trim()) {
+                              setCreator({ ...creator, subNiches: [...creator.subNiches, newSubNicheInput.trim()] });
+                              setNewSubNicheInput('');
+                            }
+                          }}
+                        >
+                          <Plus size={14} />
+                          <span>Add</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
                   {/* Location & Languages */}
                   <div className="cw-card">
-                    <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 14 }}>Location & Languages</h3>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Location & Language Demographics</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
                       <div>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>City</label>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>City</label>
                         <input 
                           type="text" 
                           value={creator.location.city} 
@@ -1254,7 +1332,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Country</label>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Country</label>
                         <input 
                           type="text" 
                           value={creator.location.country} 
@@ -1264,7 +1342,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Languages</label>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Languages (comma-separated)</label>
                         <input 
                           type="text" 
                           value={creator.languages.join(', ')} 
@@ -1277,24 +1355,24 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                   </div>
                 </form>
 
-                {/* Right Column: Verification & Public Visibility */}
+                {/* Right Column: Verification & Tier Status */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <div className="cw-card">
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Verification Status</h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#16281D', border: '1px solid #16281D', borderRadius: 10, marginBottom: 12 }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 12, color: '#19201C' }}>Verified Status</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#16281D', borderRadius: 10, marginBottom: 12 }}>
                       <ShieldCheck size={20} color="#86EFAC" />
                       <div>
                         <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#FFFFFF' }}>Identity & API Verified</div>
-                        <div style={{ fontSize: '0.74rem', color: '#D1DDD6' }}>Government ID & Meta/Google API sync</div>
+                        <div style={{ fontSize: '0.74rem', color: '#D1DDD6' }}>Official YouTube & Meta Graph Sync</div>
                       </div>
                     </div>
-                    <p style={{ fontSize: '0.76rem', color: '#59655E', lineHeight: 1.4 }}>
+                    <p style={{ fontSize: '0.78rem', color: '#59655E', lineHeight: 1.45, margin: 0 }}>
                       Verified badge signals 100% authenticity to brand media buyers and unlocks direct escrow bookings.
                     </p>
                   </div>
 
                   <div className="cw-card">
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Reputation Status</h3>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 12, color: '#19201C' }}>Reputation Tier</h3>
                     <div 
                       className="cw-tier-card tier-card-dark" 
                       style={{ padding: 16, cursor: 'pointer' }}
@@ -1305,11 +1383,112 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         <Crown size={16} color="#C29C5B" />
                       </div>
                       <p className="cw-tier-desc" style={{ fontSize: '0.78rem', marginBottom: 10 }}>
-                        Meets high standards for verified collaborations, client reviews, and reliable delivery.
+                        Top 1% reputation score calculated from verified brand collaborations, client ratings, and on-time delivery.
                       </p>
-                      <span style={{ fontSize: '0.72rem', color: '#C29C5B', fontWeight: 600 }}>
-                        View tier details & criteria →
+                      <span style={{ fontSize: '0.74rem', color: '#C29C5B', fontWeight: 700 }}>
+                        View tier criteria & perks →
                       </span>
+                    </div>
+                  </div>
+
+                  {/* Live Storefront Preview Card (Real-Time Dynamic) */}
+                  <div className="cw-creator-card-preview">
+                    <div className="cw-card-banner">
+                      <div className="cw-banner-badge-live">
+                        <span className="cw-banner-pulse" />
+                        <span>Live Storefront Preview</span>
+                      </div>
+                      <div className="cw-banner-badge-status">
+                        <span className="cw-banner-status-dot" />
+                        <span>3 Collab Slots Open</span>
+                      </div>
+                    </div>
+
+                    <div className="cw-card-body">
+                      <div className="cw-avatar-row">
+                        <div className="cw-avatar-wrapper">
+                          <img 
+                            src={creator.avatarUrl} 
+                            alt={creator.fullName} 
+                            className="cw-creator-card-avatar" 
+                          />
+                          <div className="cw-avatar-verified-badge" title="Identity & Platform API Verified">
+                            <ShieldCheck size={13} color="#FFFFFF" />
+                          </div>
+                        </div>
+
+                        <div className="cw-avatar-badges-col">
+                          <div 
+                            className="cw-creator-tier-badge tier-elite"
+                            onClick={() => setTiersModalOpen(true)}
+                            title="Click to view Reputation Tiers"
+                          >
+                            <Crown size={12} color="#C29C5B" />
+                            <span>Elite Creator · Top 1%</span>
+                          </div>
+                          <div className="cw-card-price-chip">
+                            <span className="cw-price-chip-lbl">Starts at</span>
+                            <span className="cw-price-chip-val">{formatMoney(8500)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="cw-creator-identity-block">
+                        <div className="cw-creator-name-line">
+                          <h3 className="cw-creator-card-name">{creator.fullName}</h3>
+                          <span className="cw-verified-chip">
+                            <Check size={11} />
+                            <span>Verified</span>
+                          </span>
+                        </div>
+                        <span className="cw-creator-card-handle">{creator.handle}</span>
+                      </div>
+
+                      <p className="cw-creator-card-bio">"{creator.bio}"</p>
+
+                      <div className="cw-card-tags-row">
+                        {creator.subNiches.slice(0, 4).map((niche, i) => (
+                          <span key={i} className="cw-card-niche-pill">{niche}</span>
+                        ))}
+                      </div>
+
+                      <div className="cw-card-metrics-grid">
+                        <div className="cw-card-metric-cell">
+                          <div className="cw-metric-cell-top">
+                            <Star size={12} className="cw-star-icon" />
+                            <span className="cw-metric-cell-val">{creator.overallRating || 4.9}</span>
+                          </div>
+                          <span className="cw-metric-cell-lbl">{creator.totalReviews || 24} Reviews</span>
+                          <span className="cw-metric-cell-sub">100% 5-Star</span>
+                        </div>
+
+                        <div className="cw-card-metric-cell">
+                          <div className="cw-metric-cell-top">
+                            <CheckCircle2 size={12} color="#166534" />
+                            <span className="cw-metric-cell-val">24</span>
+                          </div>
+                          <span className="cw-metric-cell-lbl">Collabs Done</span>
+                          <span className="cw-metric-cell-sub">100% On-Time</span>
+                        </div>
+
+                        <div className="cw-card-metric-cell">
+                          <div className="cw-metric-cell-top">
+                            <TrendingUp size={12} color="#C29C5B" />
+                            <span className="cw-metric-cell-val">{creator.metrics.engagementRate}%</span>
+                          </div>
+                          <span className="cw-metric-cell-lbl">Engagement</span>
+                          <span className="cw-metric-cell-sub">↗ 3.2x Top Avg</span>
+                        </div>
+                      </div>
+
+                      <button 
+                        type="button" 
+                        className="cw-storefront-cta-btn"
+                        onClick={onViewPublicProfile}
+                      >
+                        <span>Preview Full Storefront</span>
+                        <ExternalLink size={14} />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1318,7 +1497,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
           )}
 
           {/* =================================================================
-              CONTENT & PORTFOLIO TAB
+              TAB 3: CONTENT & PORTFOLIO
               ================================================================= */}
           {activeTab === 'portfolio' && (
             <div className="cw-subview">
@@ -1326,7 +1505,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div>
                   <h1 className="cw-welcome-greeting" style={{ fontSize: '1.5rem' }}>Content & Portfolio</h1>
                   <p className="cw-welcome-subtitle">
-                    Showcase past brand integrations, UGC campaigns, and high-performing sponsored content.
+                    Showcase past brand integrations, UGC campaigns, and high-performing sponsored videos.
                   </p>
                 </div>
                 <button 
@@ -1339,94 +1518,127 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20, marginTop: 24 }}>
-                {creator.portfolio.map(item => (
-                  <div key={item.id} className="cw-card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ height: 180, position: 'relative', background: '#0F1D15' }}>
-                      <img 
-                        src={item.thumbnailUrl} 
-                        alt={item.title} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                      />
-                      <span style={{
-                        position: 'absolute',
-                        top: 12,
-                        left: 12,
-                        background: 'rgba(22, 40, 29, 0.85)',
-                        color: '#FFFFFF',
-                        fontSize: '0.72rem',
-                        fontWeight: 600,
-                        padding: '3px 8px',
-                        borderRadius: 4
-                      }}>
-                        {item.format}
-                      </span>
-                    </div>
+              {/* Format Filters & Search Bar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginTop: 20, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['all', 'YouTube Integration', 'Sponsored Reel', 'Dedicated Tech Review'].map(fmt => (
+                    <button
+                      key={fmt}
+                      type="button"
+                      className={`cw-btn cw-btn-sm ${portfolioFormatFilter === fmt ? 'cw-btn-primary' : 'cw-btn-secondary'}`}
+                      onClick={() => setPortfolioFormatFilter(fmt)}
+                    >
+                      {fmt === 'all' ? 'All Formats' : fmt}
+                    </button>
+                  ))}
+                </div>
 
-                    <div style={{ padding: 18, display: 'flex', flexDirection: 'column', flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                        <span style={{ fontSize: '0.76rem', color: '#166534', fontWeight: 600 }}>
-                          Client: {item.brandClient}
+                <div className="cw-search-wrapper" style={{ width: 280 }}>
+                  <Search size={14} className="cw-search-icon" />
+                  <input 
+                    type="text" 
+                    placeholder="Search past campaigns..." 
+                    value={portfolioSearch}
+                    onChange={(e) => setPortfolioSearch(e.target.value)}
+                    className="cw-search-box"
+                    style={{ width: '100%', padding: '6px 12px 6px 32px', fontSize: '0.82rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* Portfolio Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20, marginTop: 20 }}>
+                {creator.portfolio
+                  .filter(item => portfolioFormatFilter === 'all' || item.format === portfolioFormatFilter)
+                  .filter(item => !portfolioSearch || item.title.toLowerCase().includes(portfolioSearch.toLowerCase()) || item.brandClient.toLowerCase().includes(portfolioSearch.toLowerCase()))
+                  .map(item => (
+                    <div key={item.id} className="cw-card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ height: 180, position: 'relative', background: '#0F1D15' }}>
+                        <img 
+                          src={item.thumbnailUrl} 
+                          alt={item.title} 
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        />
+                        <span style={{
+                          position: 'absolute',
+                          top: 12,
+                          left: 12,
+                          background: 'rgba(22, 40, 29, 0.9)',
+                          color: '#FFFFFF',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: 4
+                        }}>
+                          {item.format}
                         </span>
-                        <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{item.publishedDate}</span>
                       </div>
 
-                      <h3 style={{ fontSize: '0.98rem', fontWeight: 600, color: '#19201C', margin: '0 0 8px 0', lineHeight: 1.4 }}>
-                        {item.title}
-                      </h3>
+                      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                          <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 700 }}>
+                            Client: {item.brandClient}
+                          </span>
+                          <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{item.publishedDate}</span>
+                        </div>
 
-                      <p style={{ fontSize: '0.8rem', color: '#59655E', margin: '0 0 14px 0', lineClamp: 2, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {item.deliverableSummary}
-                      </p>
+                        <h3 style={{ fontSize: '0.98rem', fontWeight: 700, color: '#19201C', margin: '0 0 8px 0', lineHeight: 1.4 }}>
+                          {item.title}
+                        </h3>
 
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        background: '#FAF9F5',
-                        borderRadius: 6,
-                        border: '1px solid #E5E8E4',
-                        marginBottom: 14,
-                        fontSize: '0.8rem'
-                      }}>
-                        <span><strong>{item.views.toLocaleString()}</strong> views</span>
-                        <span><strong>{item.engagement}%</strong> engagement</span>
-                        <span style={{ color: '#166534', fontWeight: 600 }}>Audited</span>
-                      </div>
+                        <p style={{ fontSize: '0.82rem', color: '#59655E', margin: '0 0 14px 0', lineClamp: 2, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {item.deliverableSummary}
+                        </p>
 
-                      <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <a 
-                          href={item.originalUrl} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          style={{ fontSize: '0.8rem', color: '#16281D', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <span>View Original</span>
-                          <ExternalLink size={12} />
-                        </a>
-                        <button 
-                          type="button" 
-                          className="cw-btn cw-btn-secondary cw-btn-sm"
-                          onClick={() => {
-                            setCreator({
-                              ...creator,
-                              portfolio: creator.portfolio.filter(p => p.id !== item.id)
-                            });
-                            onShowToast(`Removed portfolio item: "${item.title}"`);
-                          }}
-                        >
-                          Remove
-                        </button>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          background: '#FAF9F5',
+                          borderRadius: 6,
+                          border: '1px solid #E5E8E4',
+                          marginBottom: 14,
+                          fontSize: '0.8rem'
+                        }}>
+                          <span><strong>{item.views.toLocaleString()}</strong> views</span>
+                          <span><strong>{item.engagement}%</strong> engagement</span>
+                          <span style={{ color: '#166534', fontWeight: 700 }}>Audited</span>
+                        </div>
+
+                        <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <a 
+                            href={item.originalUrl} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            style={{ fontSize: '0.8rem', color: '#16281D', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <span>View Original</span>
+                            <ExternalLink size={12} />
+                          </a>
+                          <button 
+                            type="button" 
+                            className="cw-btn cw-btn-secondary cw-btn-sm"
+                            onClick={() => {
+                              setCreator({
+                                ...creator,
+                                portfolio: creator.portfolio.filter(p => p.id !== item.id)
+                              });
+                              onShowToast(`Removed portfolio item: "${item.title}"`);
+                            }}
+                          >
+                            <Trash2 size={12} />
+                            <span>Remove</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           )}
 
           {/* =================================================================
-              SERVICES & PRICING TAB
+              TAB 4: SERVICES & PRICING
               ================================================================= */}
           {activeTab === 'services' && (
             <div className="cw-subview">
@@ -1434,107 +1646,161 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div>
                   <h1 className="cw-welcome-greeting" style={{ fontSize: '1.5rem' }}>Services & Pricing</h1>
                   <p className="cw-welcome-subtitle">
-                    Manage fixed packages, standard deliverables, rush fees, and commercial advertising licenses.
+                    Manage fixed packages, standard deliverables, rush fees, and commercial advertising rights.
                   </p>
                 </div>
                 <button 
                   type="button" 
                   className="cw-btn cw-btn-primary"
-                  onClick={() => setAddServiceModalOpen(true)}
+                  onClick={() => {
+                    setEditingPackage(null);
+                    setPkgTitle('');
+                    setPkgPrice(15000);
+                    setPkgDays(5);
+                    setPkgPlatform('YouTube');
+                    setPkgTagline('');
+                    setPkgDeliverablesText('1 Dedicated high-energy video segment\n1 Round of script review\nPinned trackable discount link');
+                    setAddServiceModalOpen(true);
+                  }}
                 >
                   <Plus size={15} />
                   <span>Create New Service</span>
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 20, marginTop: 24 }}>
-                {creator.packages.map(pkg => (
-                  <div key={pkg.id} className="cw-card" style={{ display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                      <div>
-                        <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#828E86', fontWeight: 600 }}>
-                          {pkg.platform}
-                        </span>
-                        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '2px 0 0 0', color: '#19201C' }}>
-                          {pkg.title}
-                        </h3>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#16281D' }}>
-                          {formatMoney(pkg.priceInINR)}
-                        </div>
-                        <span style={{ fontSize: '0.7rem', color: '#828E86' }}>Fixed package</span>
-                      </div>
-                    </div>
-
-                    <p style={{ fontSize: '0.84rem', color: '#59655E', lineHeight: 1.4, margin: '0 0 16px 0' }}>
-                      {pkg.tagline}
-                    </p>
-
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: 10,
-                      background: '#FAF9F5',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #E5E8E4',
-                      fontSize: '0.78rem',
-                      marginBottom: 16
-                    }}>
-                      <div>
-                        <span style={{ color: '#828E86' }}>Turnaround: </span>
-                        <strong>{pkg.deliveryDays} business days</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: '#828E86' }}>Revisions: </span>
-                        <strong>{pkg.includedRevisions} round included</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: '#828E86' }}>Publishing: </span>
-                        <strong>{pkg.publishingIncluded ? 'Included on channel' : 'Brand channels only'}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: '#828E86' }}>Organic Rights: </span>
-                        <strong>{pkg.organicUsageDays} days</strong>
-                      </div>
-                    </div>
-
-                    <div style={{ marginBottom: 16 }}>
-                      <span style={{ fontSize: '0.74rem', fontWeight: 600, textTransform: 'uppercase', color: '#828E86', display: 'block', marginBottom: 8 }}>
-                        Deliverables Included:
-                      </span>
-                      <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.82rem', color: '#19201C', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {pkg.deliverables.map((d, i) => (
-                          <li key={i}>{d}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #E5E8E4' }}>
-                      <button 
-                        type="button" 
-                        className="cw-btn cw-btn-secondary cw-btn-sm"
-                        onClick={() => onShowToast(`Duplicated package "${pkg.title}"`)}
-                      >
-                        Duplicate
-                      </button>
-                      <button 
-                        type="button" 
-                        className="cw-btn cw-btn-secondary cw-btn-sm"
-                        onClick={() => onShowToast(`Editing "${pkg.title}"`)}
-                      >
-                        Edit Service
-                      </button>
-                    </div>
-                  </div>
+              {/* Platform Filter Pills */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                {['all', 'YouTube', 'Instagram', 'Multi-Platform'].map(plat => (
+                  <button
+                    key={plat}
+                    type="button"
+                    className={`cw-btn cw-btn-sm ${servicePlatformFilter === plat ? 'cw-btn-primary' : 'cw-btn-secondary'}`}
+                    onClick={() => setServicePlatformFilter(plat)}
+                  >
+                    {plat === 'all' ? 'All Packages' : plat}
+                  </button>
                 ))}
+              </div>
+
+              {/* Packages Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 20, marginTop: 20 }}>
+                {creator.packages
+                  .filter(pkg => servicePlatformFilter === 'all' || pkg.platform.toLowerCase().includes(servicePlatformFilter.toLowerCase()))
+                  .map(pkg => (
+                    <div key={pkg.id} className="cw-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div>
+                          <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#828E86', fontWeight: 700 }}>
+                            {pkg.platform}
+                          </span>
+                          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: '2px 0 0 0', color: '#19201C' }}>
+                            {pkg.title}
+                          </h3>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#16281D' }}>
+                            {formatMoney(pkg.priceInINR)}
+                          </div>
+                          <span style={{ fontSize: '0.7rem', color: '#828E86' }}>Fixed package</span>
+                        </div>
+                      </div>
+
+                      <p style={{ fontSize: '0.84rem', color: '#59655E', lineHeight: 1.45, margin: '0 0 16px 0' }}>
+                        {pkg.tagline}
+                      </p>
+
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: 10,
+                        background: '#FAF9F5',
+                        padding: 10,
+                        borderRadius: 8,
+                        border: '1px solid #E5E8E4',
+                        fontSize: '0.78rem',
+                        marginBottom: 16
+                      }}>
+                        <div>
+                          <span style={{ color: '#828E86' }}>Turnaround: </span>
+                          <strong>{pkg.deliveryDays} business days</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#828E86' }}>Revisions: </span>
+                          <strong>{pkg.includedRevisions} round included</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#828E86' }}>Publishing: </span>
+                          <strong>{pkg.publishingIncluded ? 'Included on channel' : 'Brand channels only'}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#828E86' }}>Organic Rights: </span>
+                          <strong>{pkg.organicUsageDays} days</strong>
+                        </div>
+                      </div>
+
+                      <div style={{ marginBottom: 16 }}>
+                        <span style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', color: '#828E86', display: 'block', marginBottom: 8 }}>
+                          Deliverables Included:
+                        </span>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.82rem', color: '#19201C', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {pkg.deliverables.map((d, i) => (
+                            <li key={i}>{d}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #E5E8E4' }}>
+                        <button 
+                          type="button" 
+                          className="cw-btn cw-btn-secondary cw-btn-sm"
+                          onClick={() => {
+                            const copyPkg = { ...pkg, id: `pkg-${Date.now()}`, title: `${pkg.title} (Duplicate)` };
+                            setCreator({ ...creator, packages: [...creator.packages, copyPkg] });
+                            onShowToast(`Duplicated package "${pkg.title}"`);
+                          }}
+                        >
+                          Duplicate
+                        </button>
+                        <button 
+                          type="button" 
+                          className="cw-btn cw-btn-secondary cw-btn-sm"
+                          onClick={() => {
+                            setEditingPackage(pkg);
+                            setPkgTitle(pkg.title);
+                            setPkgPrice(pkg.priceInINR);
+                            setPkgDays(pkg.deliveryDays);
+                            setPkgPlatform(pkg.platform);
+                            setPkgTagline(pkg.tagline);
+                            setPkgDeliverablesText(pkg.deliverables.join('\n'));
+                            setAddServiceModalOpen(true);
+                          }}
+                        >
+                          <Edit2 size={12} />
+                          <span>Edit</span>
+                        </button>
+                        <button 
+                          type="button" 
+                          className="cw-btn cw-btn-secondary cw-btn-sm"
+                          style={{ color: '#DC2626' }}
+                          onClick={() => {
+                            setCreator({
+                              ...creator,
+                              packages: creator.packages.filter(p => p.id !== pkg.id)
+                            });
+                            onShowToast(`Deleted package: "${pkg.title}"`);
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
 
           {/* =================================================================
-              COLLABORATION REQUESTS TAB
+              TAB 5: COLLABORATION REQUESTS
               ================================================================= */}
           {activeTab === 'requests' && (
             <div className="cw-subview">
@@ -1547,94 +1813,187 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 </div>
               </div>
 
-              <div className="cw-requests-list" style={{ marginTop: 20 }}>
-                {collaborationRequests.map(req => (
-                  <div key={req.id} className="cw-request-card">
-                    <div className="cw-request-top">
-                      <div className="cw-brand-info">
-                        <div className="cw-brand-logo">
-                          {req.brandName.charAt(0)}
-                        </div>
-                        <div className="cw-brand-text">
-                          <span className="cw-brand-name">{req.brandName}</span>
-                          <span className="cw-request-campaign">{req.serviceTitle} • Contact: {req.brandContactPerson} ({req.brandEmail})</span>
-                        </div>
-                      </div>
-                      <span className={`cw-request-status-badge ${
-                        req.status === 'new' ? 'cw-status-new' :
-                        req.status === 'in_discussion' ? 'cw-status-negotiating' : 'cw-status-accepted'
-                      }`}>
-                        {req.status.replace('_', ' ')}
-                      </span>
-                    </div>
+              {/* Status Filter Pills */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginTop: 20, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'all', label: `All (${collaborationRequests.length})` },
+                    { id: 'new', label: `Pending (${collaborationRequests.filter(r => r.status === 'new').length})` },
+                    { id: 'in_discussion', label: `In Discussion (${collaborationRequests.filter(r => r.status === 'in_discussion').length})` },
+                    { id: 'accepted', label: `Accepted (${collaborationRequests.filter(r => r.status === 'accepted').length})` },
+                    { id: 'completed', label: `Completed (${collaborationRequests.filter(r => r.status === 'completed').length})` },
+                    { id: 'declined', label: `Declined (${collaborationRequests.filter(r => r.status === 'declined').length})` },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={`cw-btn cw-btn-sm ${requestStatusFilter === tab.id ? 'cw-btn-primary' : 'cw-btn-secondary'}`}
+                      onClick={() => setRequestStatusFilter(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
 
-                    <div className="cw-request-details-grid">
-                      <div className="cw-req-detail-item">
-                        <span className="cw-req-label">Budget</span>
-                        <span className="cw-req-val">{formatMoney(req.budgetINR)}</span>
-                      </div>
-                      <div className="cw-req-detail-item">
-                        <span className="cw-req-label">Target Delivery</span>
-                        <span className="cw-req-val">{req.proposedDeadline}</span>
-                      </div>
-                      <div className="cw-req-detail-item">
-                        <span className="cw-req-label">Submitted</span>
-                        <span className="cw-req-val">{req.submittedAt}</span>
-                      </div>
-                      <div className="cw-req-detail-item">
-                        <span className="cw-req-label">Pipeline Stage</span>
-                        <span className="cw-req-val" style={{ textTransform: 'capitalize' }}>
-                          {req.pipelineStage?.replace('_', ' ') || 'Proposal Review'}
+                <div className="cw-search-wrapper" style={{ width: 280 }}>
+                  <Search size={14} className="cw-search-icon" />
+                  <input 
+                    type="text" 
+                    placeholder="Search by brand or brief..." 
+                    value={requestSearchQuery}
+                    onChange={(e) => setRequestSearchQuery(e.target.value)}
+                    className="cw-search-box"
+                    style={{ width: '100%', padding: '6px 12px 6px 32px', fontSize: '0.82rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* Requests List */}
+              <div className="cw-requests-list" style={{ marginTop: 20 }}>
+                {collaborationRequests
+                  .filter(req => requestStatusFilter === 'all' || req.status === requestStatusFilter)
+                  .filter(req => !requestSearchQuery || req.brandName.toLowerCase().includes(requestSearchQuery.toLowerCase()) || req.serviceTitle.toLowerCase().includes(requestSearchQuery.toLowerCase()))
+                  .map(req => (
+                    <div key={req.id} className="cw-request-card">
+                      <div className="cw-request-top">
+                        <div className="cw-brand-info">
+                          <div className="cw-brand-logo">
+                            {req.brandName.charAt(0)}
+                          </div>
+                          <div className="cw-brand-text">
+                            <span className="cw-brand-name">{req.brandName}</span>
+                            <span className="cw-request-campaign">{req.serviceTitle} • Contact: {req.brandContactPerson} ({req.brandEmail})</span>
+                          </div>
+                        </div>
+                        <span className={`cw-request-status-badge ${
+                          req.status === 'new' ? 'cw-status-new' :
+                          req.status === 'in_discussion' ? 'cw-status-negotiating' : 'cw-status-accepted'
+                        }`}>
+                          {req.status.replace('_', ' ')}
                         </span>
                       </div>
-                    </div>
 
-                    <div style={{ marginBottom: 14 }}>
-                      <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', color: '#828E86', fontWeight: 600 }}>Campaign Brief:</span>
-                      <p style={{ fontSize: '0.85rem', color: '#19201C', margin: '4px 0 0 0', lineHeight: 1.5 }}>
-                        {req.campaignBrief}
-                      </p>
-                    </div>
+                      <div className="cw-request-details-grid">
+                        <div className="cw-req-detail-item">
+                          <span className="cw-req-label">Budget</span>
+                          <span className="cw-req-val">{formatMoney(req.budgetINR)}</span>
+                        </div>
+                        <div className="cw-req-detail-item">
+                          <span className="cw-req-label">Target Delivery</span>
+                          <span className="cw-req-val">{req.proposedDeadline}</span>
+                        </div>
+                        <div className="cw-req-detail-item">
+                          <span className="cw-req-label">Submitted</span>
+                          <span className="cw-req-val">{req.submittedAt}</span>
+                        </div>
+                        <div className="cw-req-detail-item">
+                          <span className="cw-req-label">Escrow Status</span>
+                          <span className="cw-req-val" style={{ color: req.escrowStatus === 'held' ? '#166534' : '#828E86' }}>
+                            {req.escrowStatus === 'held' ? 'Escrow Secured' : 'Pending Funding'}
+                          </span>
+                        </div>
+                      </div>
 
-                    <div className="cw-request-actions">
-                      <button 
-                        type="button" 
-                        className="cw-btn cw-btn-counter cw-btn-sm"
-                        onClick={() => {
-                          setSelectedRequestForDetail(req);
-                          setCounterAmount(req.budgetINR + 2000);
-                          setCounterOfferModalOpen(true);
-                        }}
-                      >
-                        Counteroffer
-                      </button>
-                      <button 
-                        type="button" 
-                        className="cw-btn cw-btn-decline cw-btn-sm"
-                        onClick={() => {
-                          setSelectedRequestForDetail(req);
-                          setDeclineModalOpen(true);
-                        }}
-                      >
-                        Decline
-                      </button>
-                      <button 
-                        type="button" 
-                        className="cw-btn cw-btn-accept cw-btn-sm"
-                        onClick={() => handleAcceptRequest(req.id)}
-                      >
-                        <Check size={14} />
-                        <span>Accept Request</span>
-                      </button>
+                      <div style={{ marginBottom: 14 }}>
+                        <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', color: '#828E86', fontWeight: 700 }}>Campaign Brief:</span>
+                        <p style={{ fontSize: '0.85rem', color: '#19201C', margin: '4px 0 0 0', lineHeight: 1.5 }}>
+                          {req.campaignBrief}
+                        </p>
+                      </div>
+
+                      <div className="cw-request-actions">
+                        {req.status === 'new' && (
+                          <>
+                            <button 
+                              type="button" 
+                              className="cw-btn cw-btn-counter cw-btn-sm"
+                              onClick={() => {
+                                setSelectedRequestForDetail(req);
+                                setCounterAmount(req.budgetINR + 2000);
+                                setCounterOfferModalOpen(true);
+                              }}
+                            >
+                              Counteroffer
+                            </button>
+                            <button 
+                              type="button" 
+                              className="cw-btn cw-btn-decline cw-btn-sm"
+                              onClick={() => {
+                                setSelectedRequestForDetail(req);
+                                setDeclineModalOpen(true);
+                              }}
+                            >
+                              Decline
+                            </button>
+                            <button 
+                              type="button" 
+                              className="cw-btn cw-btn-accept cw-btn-sm"
+                              onClick={() => handleAcceptRequest(req.id)}
+                            >
+                              <Check size={14} />
+                              <span>Accept Request</span>
+                            </button>
+                          </>
+                        )}
+
+                        {req.status === 'in_discussion' && (
+                          <>
+                            <button 
+                              type="button" 
+                              className="cw-btn cw-btn-secondary cw-btn-sm"
+                              onClick={() => {
+                                const match = conversations.find(c => c.brandName.toLowerCase().includes(req.brandName.toLowerCase()));
+                                if (match) setActiveConversationId(match.id);
+                                setActiveTab('messages');
+                              }}
+                            >
+                              <MessageSquare size={13} />
+                              <span>Open Discussion Chat</span>
+                            </button>
+                            <button 
+                              type="button" 
+                              className="cw-btn cw-btn-accept cw-btn-sm"
+                              onClick={() => handleAcceptRequest(req.id)}
+                            >
+                              <Check size={14} />
+                              <span>Accept Agreed Terms</span>
+                            </button>
+                          </>
+                        )}
+
+                        {req.status === 'accepted' && (
+                          <>
+                            <button 
+                              type="button" 
+                              className="cw-btn cw-btn-primary cw-btn-sm"
+                              onClick={() => {
+                                setSelectedRequestForDetail(req);
+                                setSubmitDraftModalOpen(true);
+                              }}
+                            >
+                              <UploadCloud size={14} />
+                              <span>Submit Deliverable Draft</span>
+                            </button>
+                            <button 
+                              type="button" 
+                              className="cw-btn cw-btn-secondary cw-btn-sm"
+                              style={{ background: '#EDF5F0', color: '#166534', borderColor: '#166534' }}
+                              onClick={() => handleMarkDealComplete(req)}
+                            >
+                              <CheckCircle2 size={14} />
+                              <span>Complete & Release Escrow</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           )}
 
           {/* =================================================================
-              MESSAGES TAB
+              TAB 6: MESSAGES & CHAT
               ================================================================= */}
           {activeTab === 'messages' && (
             <div className="cw-subview">
@@ -1642,7 +2001,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div>
                   <h1 className="cw-welcome-greeting" style={{ fontSize: '1.5rem' }}>Brand Direct Messages</h1>
                   <p className="cw-welcome-subtitle">
-                    Coordinate campaign briefs, script signoffs, and draft reviews in real time.
+                    Coordinate campaign briefs, script signoffs, and draft reviews in real time with brand sponsors.
                   </p>
                 </div>
               </div>
@@ -1661,33 +2020,48 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
               }}>
                 {/* Conversations list */}
                 <div style={{ borderRight: '1px solid #E5E8E4', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ padding: '14px 16px', borderBottom: '1px solid #E5E8E4' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Active Conversations</span>
+                  <div style={{ padding: '12px 14px', borderBottom: '1px solid #E5E8E4' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Search messages..." 
+                      value={chatSearchQuery}
+                      onChange={(e) => setChatSearchQuery(e.target.value)}
+                      className="cw-search-box"
+                      style={{ width: '100%', fontSize: '0.8rem', padding: '6px 10px' }}
+                    />
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto' }}>
-                    {conversations.map(conv => (
-                      <div 
-                        key={conv.id}
-                        style={{
-                          padding: '12px 16px',
-                          borderBottom: '1px solid #E5E8E4',
-                          cursor: 'pointer',
-                          background: activeConversationId === conv.id ? '#FAF9F5' : '#FFFFFF',
-                          borderLeft: activeConversationId === conv.id ? '3px solid #16281D' : '3px solid transparent'
-                        }}
-                        onClick={() => setActiveConversationId(conv.id)}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                          <img 
-                            src={conv.brandAvatar} 
-                            alt={conv.brandName} 
-                            style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} 
-                          />
-                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#19201C' }}>{conv.brandName}</span>
+                    {conversations
+                      .filter(conv => !chatSearchQuery || conv.brandName.toLowerCase().includes(chatSearchQuery.toLowerCase()))
+                      .map(conv => (
+                        <div 
+                          key={conv.id}
+                          style={{
+                            padding: '12px 16px',
+                            borderBottom: '1px solid #E5E8E4',
+                            cursor: 'pointer',
+                            background: activeConversationId === conv.id ? '#FAF9F5' : '#FFFFFF',
+                            borderLeft: activeConversationId === conv.id ? '3px solid #16281D' : '3px solid transparent'
+                          }}
+                          onClick={() => {
+                            setActiveConversationId(conv.id);
+                            setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unread: false } : c));
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <img 
+                                src={conv.brandAvatar} 
+                                alt={conv.brandName} 
+                                style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} 
+                              />
+                              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#19201C' }}>{conv.brandName}</span>
+                            </div>
+                            {conv.unread && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444' }} />}
+                          </div>
+                          <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{conv.campaign}</span>
                         </div>
-                        <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{conv.campaign}</span>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
 
@@ -1701,7 +2075,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                           <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#19201C' }}>{currentConv.brandName}</div>
                           <span style={{ fontSize: '0.75rem', color: '#59655E' }}>{currentConv.contactPerson} • {currentConv.campaign}</span>
                         </div>
-                        <span style={{ fontSize: '0.74rem', background: '#16281D', color: '#86EFAC', border: '1px solid #16281D', padding: '4px 10px', borderRadius: 999, fontWeight: 700 }}>
+                        <span style={{ fontSize: '0.74rem', background: '#16281D', color: '#86EFAC', padding: '4px 10px', borderRadius: 999, fontWeight: 700 }}>
                           Escrow Protected
                         </span>
                       </div>
@@ -1734,6 +2108,25 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         ))}
                       </div>
 
+                      {/* Quick Suggestion Chips */}
+                      <div style={{ padding: '8px 20px', borderTop: '1px solid #E5E8E4', display: 'flex', gap: 8, overflowX: 'auto', background: '#FAF9F5' }}>
+                        {[
+                          'Here is the deliverable draft link for review 🎥',
+                          'When should we schedule the live posting date?',
+                          'Confirmed! Adding this to our shooting schedule.',
+                          'Can you review the script outline?'
+                        ].map((chip, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            style={{ whiteSpace: 'nowrap', fontSize: '0.75rem', padding: '4px 10px', borderRadius: 999, background: '#FFFFFF', border: '1px solid #E5E8E4', cursor: 'pointer', color: '#59655E' }}
+                            onClick={() => setChatReplyText(chip)}
+                          >
+                            {chip}
+                          </button>
+                        ))}
+                      </div>
+
                       <form 
                         onSubmit={handleSendMessage}
                         style={{ padding: '14px 20px', borderTop: '1px solid #E5E8E4', display: 'flex', gap: 10 }}
@@ -1759,7 +2152,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
           )}
 
           {/* =================================================================
-              AVAILABILITY & CALENDAR TAB
+              TAB 7: AVAILABILITY & CALENDAR
               ================================================================= */}
           {activeTab === 'calendar' && (
             <div className="cw-subview">
@@ -1770,42 +2163,129 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                     Control booking slots, response time commitments, and upcoming campaign delivery deadlines.
                   </p>
                 </div>
+                <button 
+                  type="button" 
+                  className="cw-btn cw-btn-primary"
+                  onClick={() => setAddEventModalOpen(true)}
+                >
+                  <Plus size={15} />
+                  <span>Add Milestone / Event</span>
+                </button>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, marginTop: 20 }}>
+                {/* Calendar View Card */}
                 <div className="cw-card">
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 14 }}>Campaign Delivery Calendar (October – November 2026)</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ padding: '14px 16px', borderRadius: 10, background: '#FFFFFF', border: '1.5px solid #16281D', boxShadow: '0 1px 3px rgba(22, 40, 29, 0.06)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <strong style={{ fontSize: '0.88rem', color: '#16281D' }}>SuperAI Labs — YouTube Integration</strong>
-                        <span style={{ fontSize: '0.78rem', color: '#16281D', fontWeight: 700 }}>Due Nov 05, 2026</span>
-                      </div>
-                      <span style={{ fontSize: '0.78rem', color: '#59655E', fontWeight: 500 }}>Status: Script Outline drafting</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#19201C' }}>
+                      {calendarMonth === 'october' ? 'October 2026' : 'November 2026'}
+                    </h3>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button 
+                        type="button" 
+                        className={`cw-btn cw-btn-sm ${calendarMonth === 'october' ? 'cw-btn-primary' : 'cw-btn-secondary'}`}
+                        onClick={() => setCalendarMonth('october')}
+                      >
+                        October
+                      </button>
+                      <button 
+                        type="button" 
+                        className={`cw-btn cw-btn-sm ${calendarMonth === 'november' ? 'cw-btn-primary' : 'cw-btn-secondary'}`}
+                        onClick={() => setCalendarMonth('november')}
+                      >
+                        November
+                      </button>
                     </div>
+                  </div>
 
-                    <div style={{ padding: '14px 16px', borderRadius: 10, background: '#FFFFFF', border: '1px solid #D0D6CF', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <strong style={{ fontSize: '0.88rem', color: '#19201C' }}>DevToolbox Cloud — Dedicated Review</strong>
-                        <span style={{ fontSize: '0.78rem', color: '#59655E', fontWeight: 600 }}>Due Nov 14, 2026</span>
-                      </div>
-                      <span style={{ fontSize: '0.78rem', color: '#828E86' }}>Status: Proposal accepted</span>
-                    </div>
+                  {/* 7-Day Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center', marginBottom: 8, fontSize: '0.75rem', fontWeight: 700, color: '#828E86' }}>
+                    <span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span>
+                  </div>
 
-                    <div style={{ padding: '14px 16px', borderRadius: 10, background: '#FFFFFF', border: '1.5px solid #166534', boxShadow: '0 1px 3px rgba(22, 101, 52, 0.06)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <strong style={{ fontSize: '0.88rem', color: '#166534' }}>NextLearn AI — Reel Integration</strong>
-                        <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 700 }}>Completed Oct 16, 2026</span>
-                      </div>
-                      <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 500 }}>Status: Escrow released (₹8,500)</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+                    {Array.from({ length: 31 }, (_, i) => {
+                      const dayNum = i + 1;
+                      const dateStr = `2026-${calendarMonth === 'october' ? '10' : '11'}-${dayNum < 10 ? '0' + dayNum : dayNum}`;
+                      const eventsForDay = calendarEvents.filter(e => e.date === dateStr);
+                      const isSelected = selectedCalendarDate === dateStr;
+
+                      return (
+                        <div 
+                          key={dayNum}
+                          onClick={() => setSelectedCalendarDate(dateStr)}
+                          style={{
+                            minHeight: 64,
+                            padding: '6px 4px',
+                            background: isSelected ? '#EDF5F0' : '#FFFFFF',
+                            border: isSelected ? '2px solid #16281D' : '1px solid #E5E8E4',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <span style={{ fontSize: '0.8rem', fontWeight: isSelected ? 800 : 600, color: isSelected ? '#16281D' : '#59655E' }}>
+                            {dayNum}
+                          </span>
+                          {eventsForDay.map(ev => (
+                            <span 
+                              key={ev.id} 
+                              style={{
+                                width: '90%',
+                                fontSize: '0.65rem',
+                                padding: '2px 4px',
+                                borderRadius: 4,
+                                marginTop: 4,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                background: ev.type === 'shooting' ? '#FEF3C7' : ev.type === 'publish' ? '#EDF5F0' : ev.type === 'blackout' ? '#FEE2E2' : '#E0F2FE',
+                                color: ev.type === 'shooting' ? '#B45309' : ev.type === 'publish' ? '#15803D' : ev.type === 'blackout' ? '#B91C1C' : '#0369A1',
+                                fontWeight: 700
+                              }}
+                              title={`${ev.title} (${ev.brand})`}
+                            >
+                              {ev.title}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected Day Schedule Details */}
+                  <div style={{ marginTop: 20, padding: 14, background: '#FAF9F5', borderRadius: 10, border: '1px solid #E5E8E4' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#19201C', marginBottom: 8 }}>
+                      Schedule for {selectedCalendarDate}:
                     </div>
+                    {calendarEvents.filter(e => e.date === selectedCalendarDate).length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {calendarEvents.filter(e => e.date === selectedCalendarDate).map(ev => (
+                          <div key={ev.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#FFFFFF', borderRadius: 8, border: '1px solid #E5E8E4' }}>
+                            <div>
+                              <strong style={{ fontSize: '0.86rem', color: '#19201C' }}>{ev.title}</strong>
+                              <span style={{ fontSize: '0.76rem', color: '#828E86', display: 'block' }}>Brand: {ev.brand} • Type: {ev.type}</span>
+                            </div>
+                            <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>
+                              {ev.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.82rem', color: '#828E86' }}>No scheduled shoots or deadlines on this date. Open for bookings!</span>
+                    )}
                   </div>
                 </div>
 
+                {/* Availability Settings Card */}
                 <div className="cw-card">
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 14 }}>Availability Settings</h3>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Availability Settings</h3>
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Status</label>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Current Booking Status</label>
                     <select 
                       value={creator.availability.status}
                       onChange={(e) => setCreator({
@@ -1822,7 +2302,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 500, color: '#59655E', display: 'block', marginBottom: 6 }}>Expected Response Time</label>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Expected Response Time</label>
                     <input 
                       type="text" 
                       value={creator.availability.responseTime}
@@ -1835,13 +2315,23 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                     />
                   </div>
 
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Active Deals Capacity</label>
+                    <input 
+                      type="text" 
+                      defaultValue="3 Concurrent Brand Deals"
+                      className="cw-search-box"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
                   <button 
                     type="button" 
                     className="cw-btn cw-btn-primary" 
                     style={{ width: '100%', marginTop: 8 }}
-                    onClick={() => onShowToast('Availability settings updated!')}
+                    onClick={() => onShowToast('Availability & calendar settings saved successfully!')}
                   >
-                    Save Availability
+                    Save Availability Settings
                   </button>
                 </div>
               </div>
@@ -1849,90 +2339,112 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
           )}
 
           {/* =================================================================
-              EARNINGS TAB
+              TAB 8: EARNINGS
               ================================================================= */}
           {activeTab === 'earnings' && (
             <div className="cw-subview">
               <div className="cw-section-header">
                 <div>
-                  <h1 className="cw-welcome-greeting" style={{ fontSize: '1.5rem' }}>Earnings & Invoices</h1>
+                  <h1 className="cw-welcome-greeting" style={{ fontSize: '1.5rem' }}>Earnings & Payouts</h1>
                   <p className="cw-welcome-subtitle">
-                    Track completed campaigns, held escrow balances, and automated invoice records.
+                    Track completed campaigns, held escrow balances, and instant withdrawal payouts.
                   </p>
                 </div>
+                <button 
+                  type="button" 
+                  className="cw-btn cw-btn-primary"
+                  onClick={() => setPayoutModalOpen(true)}
+                >
+                  <Wallet size={15} />
+                  <span>Request Payout / Withdraw</span>
+                </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginTop: 20, marginBottom: 24 }}>
+              {/* Top Financial Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 20, marginBottom: 24 }}>
                 <div className="cw-card">
-                  <span style={{ fontSize: '0.78rem', color: '#828E86', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Lifetime Earned</span>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>
-                    {formatMoney(142000)}
+                  <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>Lifetime Earned</span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>
+                    {formatMoney(lifetimeEarnedINR)}
                   </div>
-                  <span style={{ fontSize: '0.74rem', color: '#166534', marginTop: 4, display: 'block' }}>24 completed collaborations</span>
+                  <span style={{ fontSize: '0.74rem', color: '#166534', marginTop: 4, display: 'block', fontWeight: 600 }}>24 completed collaborations</span>
+                </div>
+
+                <div className="cw-card" style={{ border: '1.5px solid #166534' }}>
+                  <span style={{ fontSize: '0.74rem', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>Available for Payout</span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>
+                    {formatMoney(availablePayoutINR)}
+                  </div>
+                  <span style={{ fontSize: '0.74rem', color: '#166534', marginTop: 4, display: 'block' }}>Instant transfer ready</span>
                 </div>
 
                 <div className="cw-card">
-                  <span style={{ fontSize: '0.78rem', color: '#828E86', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Held in Creatorly Escrow</span>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#166534', marginTop: 4 }}>
-                    {formatMoney(14500)}
+                  <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>Held in Escrow</span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0369A1', marginTop: 4 }}>
+                    {formatMoney(escrowHeldINR)}
                   </div>
                   <span style={{ fontSize: '0.74rem', color: '#59655E', marginTop: 4, display: 'block' }}>Releases upon brand signoff</span>
                 </div>
 
                 <div className="cw-card">
-                  <span style={{ fontSize: '0.78rem', color: '#828E86', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Pending Proposals</span>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#C29C5B', marginTop: 4 }}>
+                  <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>Pending Proposals</span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#C29C5B', marginTop: 4 }}>
                     {formatMoney(12000)}
                   </div>
                   <span style={{ fontSize: '0.74rem', color: '#59655E', marginTop: 4, display: 'block' }}>1 brand awaiting acceptance</span>
                 </div>
               </div>
 
+              {/* Transactions Table Card */}
               <div className="cw-card">
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 14 }}>Transaction & Invoice History</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#FAF9F5', borderRadius: 8, border: '1px solid #E5E8E4' }}>
-                    <div>
-                      <strong style={{ fontSize: '0.88rem', color: '#19201C' }}>NextLearn AI (Sponsored Reel)</strong>
-                      <span style={{ fontSize: '0.75rem', color: '#828E86', display: 'block' }}>Paid on Oct 17, 2026 • Ref: INV-2026-904</span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#166534' }}>+{formatMoney(8500)}</span>
-                      <button 
-                        type="button" 
-                        className="cw-btn cw-btn-secondary cw-btn-sm" 
-                        style={{ marginLeft: 12 }}
-                        onClick={() => onShowToast('Downloaded PDF Invoice for NextLearn AI')}
-                      >
-                        PDF
-                      </button>
-                    </div>
-                  </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#19201C' }}>Transaction & Payout History</h3>
+                  <button 
+                    type="button" 
+                    className="cw-btn cw-btn-secondary cw-btn-sm"
+                    onClick={() => onShowToast('Exported annual tax summary CSV.')}
+                  >
+                    <Download size={13} />
+                    <span>Export Tax Statement</span>
+                  </button>
+                </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#FAF9F5', borderRadius: 8, border: '1px solid #E5E8E4' }}>
-                    <div>
-                      <strong style={{ fontSize: '0.88rem', color: '#19201C' }}>MinimalGear (UGC Ad Creative)</strong>
-                      <span style={{ fontSize: '0.75rem', color: '#828E86', display: 'block' }}>Paid on Oct 04, 2026 • Ref: INV-2026-881</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {payoutTransactions.map(tx => (
+                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#FAF9F5', borderRadius: 10, border: '1px solid #E5E8E4' }}>
+                      <div>
+                        <strong style={{ fontSize: '0.88rem', color: '#19201C' }}>{tx.brandOrTarget}</strong>
+                        <span style={{ fontSize: '0.76rem', color: '#828E86', display: 'block' }}>{tx.description} • {tx.date} • Ref: {tx.invoiceRef}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <span style={{
+                          fontSize: '0.98rem',
+                          fontWeight: 800,
+                          color: tx.type === 'withdrawal' ? '#DC2626' : '#166534'
+                        }}>
+                          {tx.type === 'withdrawal' ? '-' : '+'}{formatMoney(tx.amountINR)}
+                        </span>
+                        <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>
+                          {tx.status}
+                        </span>
+                        <button 
+                          type="button" 
+                          className="cw-btn cw-btn-secondary cw-btn-sm"
+                          onClick={() => onShowToast(`Downloaded PDF Receipt (${tx.invoiceRef})`)}
+                        >
+                          <Download size={12} />
+                          <span>PDF</span>
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#166534' }}>+{formatMoney(6000)}</span>
-                      <button 
-                        type="button" 
-                        className="cw-btn cw-btn-secondary cw-btn-sm" 
-                        style={{ marginLeft: 12 }}
-                        onClick={() => onShowToast('Downloaded PDF Invoice for MinimalGear')}
-                      >
-                        PDF
-                      </button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
           {/* =================================================================
-              PERFORMANCE TAB
+              TAB 9: PERFORMANCE
               ================================================================= */}
           {activeTab === 'performance' && (
             <div className="cw-subview">
@@ -1940,48 +2452,156 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div>
                   <h1 className="cw-welcome-greeting" style={{ fontSize: '1.5rem' }}>Creator Performance & Audience</h1>
                   <p className="cw-welcome-subtitle">
-                    Verified engagement statistics and collaboration conversion metrics.
+                    Verified engagement statistics and official API sync connections.
                   </p>
                 </div>
               </div>
 
+              {/* 4 Summary Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 20, marginBottom: 24 }}>
                 <div className="cw-card">
-                  <span style={{ fontSize: '0.72rem', color: '#828E86', textTransform: 'uppercase' }}>Profile Views</span>
+                  <span style={{ fontSize: '0.72rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Profile Views</span>
                   <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>1,420</div>
-                  <span style={{ fontSize: '0.7rem', color: '#166534' }}>+18% this month</span>
+                  <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>+18% this month</span>
                 </div>
                 <div className="cw-card">
-                  <span style={{ fontSize: '0.72rem', color: '#828E86', textTransform: 'uppercase' }}>Conversion Rate</span>
+                  <span style={{ fontSize: '0.72rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Conversion Rate</span>
                   <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>18.4%</div>
-                  <span style={{ fontSize: '0.7rem', color: '#59655E' }}>Inquiries to bookings</span>
+                  <span style={{ fontSize: '0.72rem', color: '#59655E' }}>Inquiries to bookings</span>
                 </div>
                 <div className="cw-card">
-                  <span style={{ fontSize: '0.72rem', color: '#828E86', textTransform: 'uppercase' }}>Avg Delivery Time</span>
+                  <span style={{ fontSize: '0.72rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Avg Delivery Time</span>
                   <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>4.8 Days</div>
-                  <span style={{ fontSize: '0.7rem', color: '#166534' }}>100% on time</span>
+                  <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>100% on time delivery</span>
                 </div>
                 <div className="cw-card">
-                  <span style={{ fontSize: '0.72rem', color: '#828E86', textTransform: 'uppercase' }}>Audience Reach</span>
+                  <span style={{ fontSize: '0.72rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Total Audience Reach</span>
                   <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>85,000</div>
-                  <span style={{ fontSize: '0.7rem', color: '#59655E' }}>YouTube & Instagram</span>
+                  <span style={{ fontSize: '0.72rem', color: '#59655E' }}>Audited Social Followers</span>
                 </div>
               </div>
 
+              {/* Platform Reach Cards & API Sync */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 24 }}>
+                <div className="cw-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <strong style={{ fontSize: '1rem', color: '#19201C' }}>YouTube Channel</strong>
+                    <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>Connected</span>
+                  </div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#16281D' }}>52,000 Subs</div>
+                  <span style={{ fontSize: '0.78rem', color: '#59655E', display: 'block', marginTop: 2 }}>Avg 14.2K views • 5.2% engagement</span>
+                  <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #E5E8E4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{apiSyncState.youtube}</span>
+                    <button 
+                      type="button" 
+                      className="cw-btn cw-btn-secondary cw-btn-sm"
+                      onClick={() => handleSyncApi('youtube')}
+                      disabled={syncingApi === 'youtube'}
+                    >
+                      <RefreshCw size={12} className={syncingApi === 'youtube' ? 'spin' : ''} />
+                      <span>{syncingApi === 'youtube' ? 'Syncing...' : 'Sync Now'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="cw-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <strong style={{ fontSize: '1rem', color: '#19201C' }}>Instagram Profile</strong>
+                    <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>Connected</span>
+                  </div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#16281D' }}>28,000 Followers</div>
+                  <span style={{ fontSize: '0.78rem', color: '#59655E', display: 'block', marginTop: 2 }}>Avg 38.5K views • 4.8% engagement</span>
+                  <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #E5E8E4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{apiSyncState.meta}</span>
+                    <button 
+                      type="button" 
+                      className="cw-btn cw-btn-secondary cw-btn-sm"
+                      onClick={() => handleSyncApi('meta')}
+                      disabled={syncingApi === 'meta'}
+                    >
+                      <RefreshCw size={12} className={syncingApi === 'meta' ? 'spin' : ''} />
+                      <span>{syncingApi === 'meta' ? 'Syncing...' : 'Sync Now'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="cw-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <strong style={{ fontSize: '1rem', color: '#19201C' }}>LinkedIn Presence</strong>
+                    <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>Connected</span>
+                  </div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#16281D' }}>5,000 Followers</div>
+                  <span style={{ fontSize: '0.78rem', color: '#59655E', display: 'block', marginTop: 2 }}>High developer & founder demographic</span>
+                  <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #E5E8E4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{apiSyncState.linkedin}</span>
+                    <button 
+                      type="button" 
+                      className="cw-btn cw-btn-secondary cw-btn-sm"
+                      onClick={() => handleSyncApi('linkedin')}
+                      disabled={syncingApi === 'linkedin'}
+                    >
+                      <RefreshCw size={12} className={syncingApi === 'linkedin' ? 'spin' : ''} />
+                      <span>{syncingApi === 'linkedin' ? 'Syncing...' : 'Sync Now'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Demographics Visualization */}
               <div className="cw-card">
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 10 }}>Audited Metric Sources</h3>
-                <p style={{ fontSize: '0.84rem', color: '#59655E', lineHeight: 1.5 }}>
-                  Creatorly syncs follower counts, views, and engagement percentages directly via official YouTube Data API v3 and Meta Graph API OAuth. Metrics are verified every 24 hours to ensure transparency for brand sponsors.
-                </p>
-                <div style={{ fontSize: '0.75rem', color: '#828E86', marginTop: 8 }}>
-                  Last API Sync: Today, 3 hours ago
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Audited Demographics (Developer & Tech Audience)</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                  <div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#59655E', display: 'block', marginBottom: 10 }}>Age Distribution</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        { label: '25 – 34 years', pct: 46 },
+                        { label: '18 – 24 years', pct: 38 },
+                        { label: '35 – 44 years', pct: 12 },
+                        { label: '45+ years', pct: 4 },
+                      ].map(bar => (
+                        <div key={bar.label}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: 3 }}>
+                            <span>{bar.label}</span>
+                            <strong>{bar.pct}%</strong>
+                          </div>
+                          <div style={{ width: '100%', height: 6, background: '#FAF9F5', borderRadius: 999, overflow: 'hidden', border: '1px solid #E5E8E4' }}>
+                            <div style={{ width: `${bar.pct}%`, height: '100%', background: '#16281D', borderRadius: 999 }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#59655E', display: 'block', marginBottom: 10 }}>Top Geographies</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        { label: 'Bengaluru, India', pct: 32 },
+                        { label: 'Mumbai, India', pct: 24 },
+                        { label: 'Delhi NCR, India', pct: 18 },
+                        { label: 'United States & Global', pct: 14 },
+                        { label: 'Pune & Hyderabad', pct: 12 },
+                      ].map(geo => (
+                        <div key={geo.label}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: 3 }}>
+                            <span>{geo.label}</span>
+                            <strong>{geo.pct}%</strong>
+                          </div>
+                          <div style={{ width: '100%', height: 6, background: '#FAF9F5', borderRadius: 999, overflow: 'hidden', border: '1px solid #E5E8E4' }}>
+                            <div style={{ width: `${geo.pct}%`, height: '100%', background: '#166534', borderRadius: 999 }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {/* =================================================================
-              SETTINGS TAB
+              TAB 10: SETTINGS
               ================================================================= */}
           {activeTab === 'settings' && (
             <div className="cw-subview">
@@ -1989,7 +2609,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div>
                   <h1 className="cw-welcome-greeting" style={{ fontSize: '1.5rem' }}>Workspace Settings</h1>
                   <p className="cw-welcome-subtitle">
-                    Manage security, notification alerts, payout accounts, and profile visibility.
+                    Manage security, notification alerts, payout accounts, and reputation credentials.
                   </p>
                 </div>
                 <button 
@@ -2001,42 +2621,180 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 20, maxWidth: 680 }}>
-                <div className="cw-card">
-                  <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Notification Preferences</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.85rem' }}>
-                      <input type="checkbox" defaultChecked />
-                      <span>Email me immediately when a brand submits a collaboration request</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.85rem' }}>
-                      <input type="checkbox" defaultChecked />
-                      <span>Notify me when Escrow funds are held or released</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.85rem' }}>
-                      <input type="checkbox" defaultChecked />
-                      <span>Weekly performance summary digest</span>
-                    </label>
-                  </div>
-                </div>
+              {/* Sub-tabs Switcher */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 20, borderBottom: '1px solid #E5E8E4', paddingBottom: 10 }}>
+                {[
+                  { id: 'account', label: 'Account & Security' },
+                  { id: 'payout', label: 'Payout & Tax Details' },
+                  { id: 'notifications', label: 'Notifications' },
+                  { id: 'tier', label: 'Elite Tier Credentials' }
+                ].map(sub => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    className={`cw-btn cw-btn-sm ${settingsSubTab === sub.id ? 'cw-btn-primary' : 'cw-btn-secondary'}`}
+                    onClick={() => setSettingsSubTab(sub.id as any)}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
 
-                <div className="cw-card">
-                  <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Bank Payout Details (Creatorly Escrow)</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ marginTop: 20, maxWidth: 680 }}>
+                {settingsSubTab === 'account' && (
+                  <div className="cw-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#19201C' }}>Creator Credentials</h3>
+                    <div>
+                      <label style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', marginBottom: 4 }}>Work Email</label>
+                      <input type="email" defaultValue="alex@alexsharma.media" className="cw-search-box" style={{ width: '100%' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', marginBottom: 4 }}>Phone (SMS Deal Notifications)</label>
+                      <input type="tel" defaultValue="+91 98201 49201" className="cw-search-box" style={{ width: '100%' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#FAF9F5', borderRadius: 8, border: '1px solid #E5E8E4' }}>
+                      <div>
+                        <strong style={{ fontSize: '0.88rem', color: '#19201C' }}>Two-Factor Authentication (2FA)</strong>
+                        <span style={{ fontSize: '0.75rem', color: '#828E86', display: 'block' }}>Mandatory for direct escrow disbursements</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={twoFactorActive} 
+                        onChange={(e) => {
+                          setTwoFactorActive(e.target.checked);
+                          onShowToast(`Two-factor authentication ${e.target.checked ? 'enabled' : 'disabled'}.`);
+                        }} 
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {settingsSubTab === 'payout' && (
+                  <div className="cw-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#19201C' }}>Bank Payout Details (Creatorly Escrow)</h3>
                     <div>
                       <label style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', marginBottom: 4 }}>Account Holder Name</label>
-                      <input type="text" defaultValue="Alex Sharma" className="cw-search-box" style={{ width: '100%' }} />
+                      <input 
+                        type="text" 
+                        value={bankSettings.accountName} 
+                        onChange={(e) => setBankSettings({ ...bankSettings, accountName: e.target.value })}
+                        className="cw-search-box" 
+                        style={{ width: '100%' }} 
+                      />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', marginBottom: 4 }}>Bank Name & Branch</label>
-                      <input type="text" defaultValue="HDFC Bank, Bandra West, Mumbai" className="cw-search-box" style={{ width: '100%' }} />
+                      <input 
+                        type="text" 
+                        value={bankSettings.bankName} 
+                        onChange={(e) => setBankSettings({ ...bankSettings, bankName: e.target.value })}
+                        className="cw-search-box" 
+                        style={{ width: '100%' }} 
+                      />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <label style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', marginBottom: 4 }}>Account Number</label>
+                        <input 
+                          type="text" 
+                          value={bankSettings.accountNumber} 
+                          onChange={(e) => setBankSettings({ ...bankSettings, accountNumber: e.target.value })}
+                          className="cw-search-box" 
+                          style={{ width: '100%' }} 
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', marginBottom: 4 }}>IFSC Code</label>
+                        <input 
+                          type="text" 
+                          value={bankSettings.ifsc} 
+                          onChange={(e) => setBankSettings({ ...bankSettings, ifsc: e.target.value })}
+                          className="cw-search-box" 
+                          style={{ width: '100%' }} 
+                        />
+                      </div>
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', marginBottom: 4 }}>UPI ID (Optional fast payout)</label>
-                      <input type="text" defaultValue="alexsharma@okaxis" className="cw-search-box" style={{ width: '100%' }} />
+                      <label style={{ fontSize: '0.8rem', color: '#59655E', display: 'block', marginBottom: 4 }}>UPI ID (Instant 2-hour payout)</label>
+                      <input 
+                        type="text" 
+                        value={bankSettings.upiId} 
+                        onChange={(e) => setBankSettings({ ...bankSettings, upiId: e.target.value })}
+                        className="cw-search-box" 
+                        style={{ width: '100%' }} 
+                      />
                     </div>
+                    <button 
+                      type="button" 
+                      className="cw-btn cw-btn-primary"
+                      onClick={() => onShowToast('Bank details updated for escrow payouts!')}
+                    >
+                      Update Bank Account
+                    </button>
                   </div>
-                </div>
+                )}
+
+                {settingsSubTab === 'notifications' && (
+                  <div className="cw-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#19201C' }}>Notification Policies</h3>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.85rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={notificationPreferences.proposalEmail} 
+                        onChange={(e) => setNotificationPreferences({ ...notificationPreferences, proposalEmail: e.target.checked })}
+                      />
+                      <span>Email me immediately when a brand submits a proposal or counteroffer</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.85rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={notificationPreferences.escrowAlerts} 
+                        onChange={(e) => setNotificationPreferences({ ...notificationPreferences, escrowAlerts: e.target.checked })}
+                      />
+                      <span>Notify me when Escrow funds are held or released</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.85rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={notificationPreferences.whatsappUrgent} 
+                        onChange={(e) => setNotificationPreferences({ ...notificationPreferences, whatsappUrgent: e.target.checked })}
+                      />
+                      <span>WhatsApp notifications for urgent brand deadline changes</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.85rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={notificationPreferences.weeklyDigest} 
+                        onChange={(e) => setNotificationPreferences({ ...notificationPreferences, weeklyDigest: e.target.checked })}
+                      />
+                      <span>Weekly creator performance summary digest</span>
+                    </label>
+                  </div>
+                )}
+
+                {settingsSubTab === 'tier' && (
+                  <div className="cw-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#19201C' }}>Current Tier: Elite Creator</h3>
+                      <Crown size={20} color="#C29C5B" />
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#59655E', lineHeight: 1.5, margin: 0 }}>
+                      You have unlocked Creatorly's highest creator tier based on your 100% on-time delivery record and 4.9★ rating.
+                    </p>
+                    <div style={{ padding: 12, background: '#FAF9F5', borderRadius: 8, border: '1px solid #E5E8E4', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div>✅ <strong>0% platform fees</strong> on your first 3 deals every month</div>
+                      <div>✅ <strong>Top carousel placement</strong> in Brand Discover page</div>
+                      <div>✅ <strong>Direct Dedicated WhatsApp manager</strong> for enterprise campaigns</div>
+                    </div>
+                    <button 
+                      type="button" 
+                      className="cw-btn cw-btn-secondary"
+                      onClick={() => setTiersModalOpen(true)}
+                    >
+                      View All Reputation Tiers & Criteria
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2044,8 +2802,617 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
       </div>
 
       {/* ───────────────────────────────────────────────────────────────────
-          4. Reputation Tiers Modal (Exact Replica of User Reference Screenshot)
+          MODALS & INTERACTIVE OVERLAYS
           ─────────────────────────────────────────────────────────────────── */}
+
+      {/* 1. Request Counteroffer Modal */}
+      {counterOfferModalOpen && selectedRequestForDetail && (
+        <div className="cw-tiers-modal-overlay" onClick={() => setCounterOfferModalOpen(false)}>
+          <div className="cw-tiers-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div className="cw-tiers-modal-header">
+              <h2 className="cw-tiers-modal-title">Counteroffer to {selectedRequestForDetail.brandName}</h2>
+              <button type="button" className="cw-icon-btn" onClick={() => setCounterOfferModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>
+                  Counter Budget (INR)
+                </label>
+                <input 
+                  type="number" 
+                  value={counterAmount}
+                  onChange={(e) => setCounterAmount(Number(e.target.value))}
+                  className="cw-search-box" 
+                  style={{ width: '100%', fontSize: '1rem', fontWeight: 700 }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>
+                  Deliverable Scope Additions / Reason
+                </label>
+                <textarea 
+                  rows={3}
+                  placeholder="e.g. Can include 48-hour rush turnaround and 2 additional story reshares..."
+                  value={counterNote}
+                  onChange={(e) => setCounterNote(e.target.value)}
+                  className="cw-search-box"
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setCounterOfferModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="button" className="cw-btn cw-btn-primary" onClick={handleSubmitCounter}>
+                  Submit Counteroffer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Decline Modal */}
+      {declineModalOpen && selectedRequestForDetail && (
+        <div className="cw-tiers-modal-overlay" onClick={() => setDeclineModalOpen(false)}>
+          <div className="cw-tiers-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div className="cw-tiers-modal-header">
+              <h2 className="cw-tiers-modal-title">Decline Collaboration Request</h2>
+              <button type="button" className="cw-icon-btn" onClick={() => setDeclineModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <p style={{ fontSize: '0.85rem', color: '#59655E', margin: 0 }}>
+                Are you sure you want to decline this request from <strong>{selectedRequestForDetail.brandName}</strong>?
+              </p>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>
+                  Reason to brand:
+                </label>
+                <select 
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }}
+                >
+                  <option value="Schedule is currently at capacity.">Schedule is currently at capacity</option>
+                  <option value="Not a fit for my current content calendar.">Not a fit for my current content calendar</option>
+                  <option value="Proposed budget is below minimum rate.">Proposed budget is below minimum rate</option>
+                  <option value="Competitor category exclusivity in effect.">Competitor category exclusivity in effect</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setDeclineModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="button" className="cw-btn cw-btn-primary" style={{ background: '#E11D48' }} onClick={handleConfirmDecline}>
+                  Decline Request
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Submit Deliverable Draft Modal */}
+      {submitDraftModalOpen && selectedRequestForDetail && (
+        <div className="cw-tiers-modal-overlay" onClick={() => setSubmitDraftModalOpen(false)}>
+          <div className="cw-tiers-modal" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
+            <div className="cw-tiers-modal-header">
+              <h2 className="cw-tiers-modal-title">Submit Deliverable Draft</h2>
+              <button type="button" className="cw-icon-btn" onClick={() => setSubmitDraftModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmitDraftDeliverable} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <p style={{ fontSize: '0.85rem', color: '#59655E', margin: 0 }}>
+                Submitting review draft for <strong>{selectedRequestForDetail.brandName}</strong> ({selectedRequestForDetail.serviceTitle}).
+              </p>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>
+                  Video Preview URL (YouTube Unlisted / Frame.io / Google Drive) *
+                </label>
+                <input 
+                  type="url" 
+                  required
+                  placeholder="https://youtu.be/... or https://drive.google.com/..."
+                  value={draftUrl}
+                  onChange={(e) => setDraftUrl(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>
+                  Notes for Brand Reviewer
+                </label>
+                <textarea 
+                  rows={3}
+                  placeholder="e.g. Added the sponsored CTA at 02:40, tracked coupon code displayed on screen."
+                  value={draftNotes}
+                  onChange={(e) => setDraftNotes(e.target.value)}
+                  className="cw-search-box"
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setSubmitDraftModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="cw-btn cw-btn-primary">
+                  Submit Draft for Review
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Add Portfolio Modal */}
+      {addPortfolioModalOpen && (
+        <div className="cw-tiers-modal-overlay" onClick={() => setAddPortfolioModalOpen(false)}>
+          <div className="cw-tiers-modal" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>
+            <div className="cw-tiers-modal-header">
+              <h2 className="cw-tiers-modal-title">Add Portfolio Work</h2>
+              <button type="button" className="cw-icon-btn" onClick={() => setAddPortfolioModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const newItem: PortfolioItem = {
+                id: `port-${Date.now()}`,
+                title: newPortTitle || 'Developer Workflow Showcase',
+                category: 'Tech & Developer Tools',
+                format: newPortFormat as any,
+                platform: 'youtube',
+                thumbnailUrl: newPortThumb || '/images/work-ai-coding.jpg',
+                publishedDate: 'Just now',
+                views: Number(newPortViews) || 12000,
+                engagement: Number(newPortEngagement) || 5.5,
+                brandClient: newPortClient || 'TechBrand',
+                campaignObjective: 'Drive organic developer adoptions',
+                deliverableSummary: newPortDeliverable || '60-second integrated sponsorship segment with live code demo.',
+                originalUrl: newPortUrl || 'https://youtube.com',
+                verifiedMetrics: true
+              };
+              const updated = {
+                ...creator,
+                portfolio: [newItem, ...creator.portfolio]
+              };
+              setCreator(updated);
+              onUpdateCreator?.(updated);
+              onShowToast(`Added portfolio item: "${newItem.title}"`);
+              setAddPortfolioModalOpen(false);
+              setNewPortTitle('');
+              setNewPortClient('');
+              setNewPortUrl('');
+              setNewPortDeliverable('');
+            }} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Campaign Title *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. Next-Gen Developer Terminal Setup" 
+                  value={newPortTitle}
+                  onChange={(e) => setNewPortTitle(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Brand Client *</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. Warp Terminal" 
+                    value={newPortClient}
+                    onChange={(e) => setNewPortClient(e.target.value)}
+                    className="cw-search-box" 
+                    style={{ width: '100%' }} 
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Format</label>
+                  <select 
+                    value={newPortFormat}
+                    onChange={(e) => setNewPortFormat(e.target.value)}
+                    className="cw-search-box" 
+                    style={{ width: '100%' }}
+                  >
+                    <option value="YouTube Integration">YouTube Integration</option>
+                    <option value="Sponsored Reel">Sponsored Reel</option>
+                    <option value="Dedicated Tech Review">Dedicated Tech Review</option>
+                    <option value="Case Study">Case Study</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Total Views</label>
+                  <input 
+                    type="number" 
+                    value={newPortViews}
+                    onChange={(e) => setNewPortViews(Number(e.target.value))}
+                    className="cw-search-box" 
+                    style={{ width: '100%' }} 
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Engagement Rate (%)</label>
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={newPortEngagement}
+                    onChange={(e) => setNewPortEngagement(Number(e.target.value))}
+                    className="cw-search-box" 
+                    style={{ width: '100%' }} 
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Live Video / Post URL</label>
+                <input 
+                  type="url" 
+                  placeholder="https://youtube.com/watch?v=..." 
+                  value={newPortUrl}
+                  onChange={(e) => setNewPortUrl(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Deliverable Summary</label>
+                <textarea 
+                  rows={2} 
+                  placeholder="Brief description of the deliverables and client goals..." 
+                  value={newPortDeliverable}
+                  onChange={(e) => setNewPortDeliverable(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%', resize: 'vertical' }} 
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setAddPortfolioModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="cw-btn cw-btn-primary">
+                  Publish to Portfolio
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Add / Edit Service Modal */}
+      {addServiceModalOpen && (
+        <div className="cw-tiers-modal-overlay" onClick={() => setAddServiceModalOpen(false)}>
+          <div className="cw-tiers-modal" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>
+            <div className="cw-tiers-modal-header">
+              <h2 className="cw-tiers-modal-title">{editingPackage ? 'Edit Service Package' : 'Create New Service Package'}</h2>
+              <button type="button" className="cw-icon-btn" onClick={() => setAddServiceModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const deliverablesArray = pkgDeliverablesText
+                .split('\n')
+                .map(s => s.trim())
+                .filter(Boolean);
+
+              if (editingPackage) {
+                // Update
+                const updated = {
+                  ...creator,
+                  packages: creator.packages.map(p => {
+                    if (p.id === editingPackage.id) {
+                      return {
+                        ...p,
+                        title: pkgTitle,
+                        priceInINR: pkgPrice,
+                        deliveryDays: pkgDays,
+                        platform: pkgPlatform as any,
+                        tagline: pkgTagline,
+                        deliverables: deliverablesArray.length > 0 ? deliverablesArray : p.deliverables
+                      };
+                    }
+                    return p;
+                  })
+                };
+                setCreator(updated);
+                onUpdateCreator?.(updated);
+                onShowToast(`Updated package: "${pkgTitle}"`);
+              } else {
+                // Create
+                const newPkg: ServicePackage = {
+                  id: `pkg-${Date.now()}`,
+                  title: pkgTitle || 'Custom Sponsorship Package',
+                  tagline: pkgTagline || 'High-production tailored integration',
+                  priceInINR: pkgPrice,
+                  platform: pkgPlatform as any,
+                  deliveryDays: pkgDays,
+                  includedRevisions: 1,
+                  publishingIncluded: true,
+                  organicUsageDays: 30,
+                  paidUsageRightsIncluded: false,
+                  deliverables: deliverablesArray.length > 0 ? deliverablesArray : ['Custom high-production showcase', '1 Round of script review'],
+                  bestFor: 'Brands looking for maximum conversion'
+                };
+                const updated = {
+                  ...creator,
+                  packages: [...creator.packages, newPkg]
+                };
+                setCreator(updated);
+                onUpdateCreator?.(updated);
+                onShowToast(`Created service package: "${newPkg.title}"`);
+              }
+              setAddServiceModalOpen(false);
+            }} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Package Title *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. Dedicated Podcast Episode Sponsorship" 
+                  value={pkgTitle}
+                  onChange={(e) => setPkgTitle(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Price (INR) *</label>
+                  <input 
+                    type="number" 
+                    required
+                    value={pkgPrice}
+                    onChange={(e) => setPkgPrice(Number(e.target.value))}
+                    className="cw-search-box" 
+                    style={{ width: '100%' }} 
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Delivery Turnaround (Days)</label>
+                  <input 
+                    type="number" 
+                    value={pkgDays}
+                    onChange={(e) => setPkgDays(Number(e.target.value))}
+                    className="cw-search-box" 
+                    style={{ width: '100%' }} 
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Platform</label>
+                <select 
+                  value={pkgPlatform}
+                  onChange={(e) => setPkgPlatform(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }}
+                >
+                  <option value="YouTube">YouTube</option>
+                  <option value="Instagram Reels">Instagram Reels</option>
+                  <option value="Multi-Platform">Multi-Platform</option>
+                  <option value="LinkedIn">LinkedIn</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Short Tagline / Best For</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Ideal for product launches and feature deep-dives" 
+                  value={pkgTagline}
+                  onChange={(e) => setPkgTagline(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Deliverables (1 item per line)</label>
+                <textarea 
+                  rows={3} 
+                  value={pkgDeliverablesText}
+                  onChange={(e) => setPkgDeliverablesText(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%', resize: 'vertical' }} 
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setAddServiceModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="cw-btn cw-btn-primary">
+                  {editingPackage ? 'Save Package Changes' : 'Publish Package'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Request Payout Modal */}
+      {payoutModalOpen && (
+        <div className="cw-tiers-modal-overlay" onClick={() => setPayoutModalOpen(false)}>
+          <div className="cw-tiers-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div className="cw-tiers-modal-header">
+              <h2 className="cw-tiers-modal-title">Withdraw Available Earnings</h2>
+              <button type="button" className="cw-icon-btn" onClick={() => setPayoutModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleConfirmPayout} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ padding: 14, background: '#EDF5F0', borderRadius: 10, border: '1px solid #166534', color: '#166534' }}>
+                <span style={{ fontSize: '0.78rem', display: 'block' }}>Available for Immediate Transfer:</span>
+                <strong style={{ fontSize: '1.4rem' }}>{formatMoney(availablePayoutINR)}</strong>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E' }}>Withdrawal Amount (INR) *</label>
+                  <button 
+                    type="button" 
+                    style={{ background: 'none', border: 'none', color: '#166534', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                    onClick={() => setWithdrawAmount(availablePayoutINR)}
+                  >
+                    Withdraw All ({formatMoney(availablePayoutINR)})
+                  </button>
+                </div>
+                <input 
+                  type="number" 
+                  required
+                  min={500}
+                  max={availablePayoutINR}
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(Number(e.target.value))}
+                  className="cw-search-box" 
+                  style={{ width: '100%', fontSize: '1.1rem', fontWeight: 700 }} 
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>Payout Destination</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, border: payoutMethod === 'bank' ? '2px solid #16281D' : '1px solid #E5E8E4', background: payoutMethod === 'bank' ? '#FAF9F5' : '#FFFFFF', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="payout_dest" 
+                      checked={payoutMethod === 'bank'} 
+                      onChange={() => setPayoutMethod('bank')} 
+                    />
+                    <div>
+                      <strong style={{ fontSize: '0.86rem', color: '#19201C', display: 'block' }}>HDFC Bank (*4920)</strong>
+                      <span style={{ fontSize: '0.74rem', color: '#828E86' }}>IFSC: HDFC0000128 • Direct NEFT/IMPS</span>
+                    </div>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, border: payoutMethod === 'upi' ? '2px solid #16281D' : '1px solid #E5E8E4', background: payoutMethod === 'upi' ? '#FAF9F5' : '#FFFFFF', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="payout_dest" 
+                      checked={payoutMethod === 'upi'} 
+                      onChange={() => setPayoutMethod('upi')} 
+                    />
+                    <div>
+                      <strong style={{ fontSize: '0.86rem', color: '#19201C', display: 'block' }}>UPI Fast Payout ({bankSettings.upiId})</strong>
+                      <span style={{ fontSize: '0.74rem', color: '#828E86' }}>Estimated arrival within 2 hours</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setPayoutModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="cw-btn cw-btn-primary">
+                  Confirm Withdrawal ({formatMoney(withdrawAmount)})
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Add Calendar Event Modal */}
+      {addEventModalOpen && (
+        <div className="cw-tiers-modal-overlay" onClick={() => setAddEventModalOpen(false)}>
+          <div className="cw-tiers-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div className="cw-tiers-modal-header">
+              <h2 className="cw-tiers-modal-title">Schedule Calendar Milestone</h2>
+              <button type="button" className="cw-icon-btn" onClick={() => setAddEventModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const newEv: CalendarEventItem = {
+                id: `ev-${Date.now()}`,
+                date: newEventDate,
+                title: newEventTitle || 'Campaign Milestone',
+                brand: newEventBrand || 'Partner Brand',
+                type: newEventType,
+                status: 'confirmed'
+              };
+              setCalendarEvents(prev => [...prev, newEv]);
+              setSelectedCalendarDate(newEventDate);
+              onShowToast(`Scheduled milestone: "${newEv.title}" on ${newEventDate}!`);
+              setAddEventModalOpen(false);
+              setNewEventTitle('');
+              setNewEventBrand('');
+            }} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Milestone / Task Title *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. Record B-Roll in Studio" 
+                  value={newEventTitle}
+                  onChange={(e) => setNewEventTitle(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Brand Partner / Client</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. SuperAI Labs" 
+                  value={newEventBrand}
+                  onChange={(e) => setNewEventBrand(e.target.value)}
+                  className="cw-search-box" 
+                  style={{ width: '100%' }} 
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Date *</label>
+                  <input 
+                    type="date" 
+                    required
+                    value={newEventDate}
+                    onChange={(e) => setNewEventDate(e.target.value)}
+                    className="cw-search-box" 
+                    style={{ width: '100%' }} 
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Milestone Type</label>
+                  <select 
+                    value={newEventType}
+                    onChange={(e) => setNewEventType(e.target.value as any)}
+                    className="cw-search-box" 
+                    style={{ width: '100%' }}
+                  >
+                    <option value="shooting">🎥 Filming / Shoot Day</option>
+                    <option value="review">📝 Script / Draft Review</option>
+                    <option value="publish">🚀 Live Publish Date</option>
+                    <option value="deadline">⏰ Hard Deadline</option>
+                    <option value="blackout">⛔ Blackout / Unavailable</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setAddEventModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="cw-btn cw-btn-primary">
+                  Add to Calendar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Reputation Tiers Modal */}
       {tiersModalOpen && (
         <div className="cw-tiers-modal-overlay" onClick={() => setTiersModalOpen(false)}>
           <div className="cw-tiers-modal" onClick={e => e.stopPropagation()}>
@@ -2078,7 +3445,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div className="cw-tier-tags-row">
                   <span className="cw-tier-tag">Profile complete</span>
                   <span className="cw-tier-tag">Portfolio available</span>
-                  <span className="cw-tier-tag">Growing reputation</span>
+                  <span className="cw-tier-tag">Verified social links</span>
                 </div>
               </div>
 
@@ -2086,289 +3453,52 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
               <div className="cw-tier-card tier-card-light">
                 <div className="cw-tier-card-header">
                   <h3 className="cw-tier-name">Established Creator</h3>
-                  <span className="cw-tier-icon"><BookmarkCheck size={20} color="#335540" /></span>
+                  <span className="cw-tier-icon"><BookmarkCheck size={20} color="#15803D" /></span>
                 </div>
                 <p className="cw-tier-desc">
-                  For creators with a consistent body of work, meaningful collaboration history, and a demonstrated record of reliable delivery.
+                  Demonstrates consistent delivery, verified audience reach, and positive collaboration feedback.
                 </p>
                 <div className="cw-tier-tags-row">
-                  <span className="cw-tier-tag">Strong portfolio</span>
-                  <span className="cw-tier-tag">Completed projects</span>
-                  <span className="cw-tier-tag">Verified metrics where available</span>
+                  <span className="cw-tier-tag">5+ completed collabs</span>
+                  <span className="cw-tier-tag">Verified audience data</span>
+                  <span className="cw-tier-tag">Above-average delivery rate</span>
                 </div>
               </div>
 
-              {/* Tier 3: Elite Creator (Dark forest green #16281D exactly like screenshot) */}
+              {/* Tier 3: Elite Creator */}
               <div className="cw-tier-card tier-card-dark">
-                <span className="cw-tier-card-current-badge">Your Tier</span>
                 <div className="cw-tier-card-header">
                   <h3 className="cw-tier-name">Elite Creator</h3>
-                  <span className="cw-tier-icon"><Crown size={22} color="#C29C5B" /></span>
+                  <span className="cw-tier-icon"><Crown size={20} color="#C29C5B" /></span>
                 </div>
                 <p className="cw-tier-desc">
-                  For high-performing creators who meet clear standards for collaboration history, client satisfaction, reliability, and verified performance.
+                  Reserved for creators with exceptional track records, repeat brand partnerships, and outstanding reliability.
                 </p>
                 <div className="cw-tier-tags-row">
-                  <span className="cw-tier-tag tag-highlight">Quality record</span>
-                  <span className="cw-tier-tag">Established reputation</span>
-                  <span className="cw-tier-tag">Eligibility-based status</span>
+                  <span className="cw-tier-tag">15+ completed collabs</span>
+                  <span className="cw-tier-tag">Top-tier client ratings</span>
+                  <span className="cw-tier-tag">Escrow priority release</span>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Counteroffer Modal */}
-      {counterOfferModalOpen && selectedRequestForDetail && (
-        <div className="cw-tiers-modal-overlay" onClick={() => setCounterOfferModalOpen(false)}>
-          <div className="cw-tiers-modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
-            <div className="cw-tiers-modal-header">
-              <div>
-                <h2 className="cw-tiers-modal-title">Propose Counteroffer</h2>
-                <p className="cw-tiers-modal-subtitle">Brand: {selectedRequestForDetail.brandName}</p>
-              </div>
-              <button type="button" className="cw-icon-btn" onClick={() => setCounterOfferModalOpen(false)}>
-                <X size={18} />
+            <div className="cw-tiers-modal-footer">
+              <span className="cw-tiers-footer-text">
+                Your current tier is <strong>Elite Creator</strong> based on 24 completed deals and a 4.9★ rating.
+              </span>
+              <button 
+                type="button" 
+                className="cw-btn cw-btn-primary"
+                onClick={() => setTiersModalOpen(false)}
+              >
+                Done
               </button>
             </div>
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>
-                  Proposed Revised Budget (INR)
-                </label>
-                <input 
-                  type="number" 
-                  value={counterAmount}
-                  onChange={(e) => setCounterAmount(Number(e.target.value))}
-                  className="cw-search-box"
-                  style={{ width: '100%', fontSize: '1rem', fontWeight: 700 }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>
-                  Reason / Deliverable Additions
-                </label>
-                <textarea 
-                  rows={3}
-                  placeholder="e.g. Can include 48-hour rush delivery and 2 additional story reshares..."
-                  value={counterNote}
-                  onChange={(e) => setCounterNote(e.target.value)}
-                  className="cw-search-box"
-                  style={{ width: '100%', resize: 'vertical' }}
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
-                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setCounterOfferModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="button" className="cw-btn cw-btn-primary" onClick={handleSubmitCounter}>
-                  Submit Counteroffer
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Decline Modal */}
-      {declineModalOpen && selectedRequestForDetail && (
-        <div className="cw-tiers-modal-overlay" onClick={() => setDeclineModalOpen(false)}>
-          <div className="cw-tiers-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-            <div className="cw-tiers-modal-header">
-              <h2 className="cw-tiers-modal-title">Decline Collaboration Request</h2>
-              <button type="button" className="cw-icon-btn" onClick={() => setDeclineModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <p style={{ fontSize: '0.85rem', color: '#59655E', margin: 0 }}>
-                Are you sure you want to decline this request from <strong>{selectedRequestForDetail.brandName}</strong>?
-              </p>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 6 }}>
-                  Optional note to brand:
-                </label>
-                <select 
-                  value={declineReason}
-                  onChange={(e) => setDeclineReason(e.target.value)}
-                  className="cw-search-box"
-                  style={{ width: '100%' }}
-                >
-                  <option value="Schedule is currently at capacity.">Schedule is currently at capacity</option>
-                  <option value="Not a fit for my current content calendar.">Not a fit for my current content calendar</option>
-                  <option value="Proposed budget is below minimum rate.">Proposed budget is below minimum rate</option>
-                  <option value="Competitor category exclusivity in effect.">Competitor category exclusivity in effect</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setDeclineModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="button" className="cw-btn cw-btn-primary" style={{ background: '#E11D48' }} onClick={handleConfirmDecline}>
-                  Decline Request
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Portfolio Modal */}
-      {addPortfolioModalOpen && (
-        <div className="cw-tiers-modal-overlay" onClick={() => setAddPortfolioModalOpen(false)}>
-          <div className="cw-tiers-modal" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>
-            <div className="cw-tiers-modal-header">
-              <h2 className="cw-tiers-modal-title">Add Portfolio Work</h2>
-              <button type="button" className="cw-icon-btn" onClick={() => setAddPortfolioModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Campaign Title</label>
-                <input type="text" placeholder="e.g. Next-Gen Developer Terminal Setup" className="cw-search-box" style={{ width: '100%' }} id="new-port-title" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Brand Client</label>
-                  <input type="text" placeholder="e.g. Warp Terminal" className="cw-search-box" style={{ width: '100%' }} id="new-port-client" />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Format</label>
-                  <select className="cw-search-box" style={{ width: '100%' }} id="new-port-format">
-                    <option value="YouTube Integration">YouTube Integration</option>
-                    <option value="Sponsored Reel">Sponsored Reel</option>
-                    <option value="Dedicated Tech Review">Dedicated Tech Review</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Public Video Link</label>
-                <input type="url" placeholder="https://youtube.com/watch?v=..." className="cw-search-box" style={{ width: '100%' }} id="new-port-url" />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
-                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setAddPortfolioModalOpen(false)}>
-                  Cancel
-                </button>
-                <button 
-                  type="button" 
-                  className="cw-btn cw-btn-primary"
-                  onClick={() => {
-                    const titleInput = (document.getElementById('new-port-title') as HTMLInputElement)?.value;
-                    const clientInput = (document.getElementById('new-port-client') as HTMLInputElement)?.value;
-                    const formatInput = (document.getElementById('new-port-format') as HTMLSelectElement)?.value;
-                    const urlInput = (document.getElementById('new-port-url') as HTMLInputElement)?.value;
-                    
-                    const newItem: PortfolioItem = {
-                      id: `port-${Date.now()}`,
-                      title: titleInput || 'Developer Workflow Showcase',
-                      category: 'Tech & Developer Tools',
-                      format: (formatInput as any) || 'YouTube Integration',
-                      platform: 'youtube',
-                      thumbnailUrl: '/images/work-ai-coding.jpg',
-                      publishedDate: 'Just now',
-                      views: 12400,
-                      engagement: 6.8,
-                      brandClient: clientInput || 'TechBrand',
-                      campaignObjective: 'Drive organic developer adoptions',
-                      deliverableSummary: '60-second integrated sponsorship segment with live code demo.',
-                      originalUrl: urlInput || 'https://youtube.com',
-                      verifiedMetrics: true
-                    };
-                    setCreator({
-                      ...creator,
-                      portfolio: [newItem, ...creator.portfolio]
-                    });
-                    onShowToast(`Added portfolio item: "${newItem.title}"`);
-                    setAddPortfolioModalOpen(false);
-                  }}
-                >
-                  Publish to Portfolio
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Service Modal */}
-      {addServiceModalOpen && (
-        <div className="cw-tiers-modal-overlay" onClick={() => setAddServiceModalOpen(false)}>
-          <div className="cw-tiers-modal" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>
-            <div className="cw-tiers-modal-header">
-              <h2 className="cw-tiers-modal-title">Create New Service Package</h2>
-              <button type="button" className="cw-icon-btn" onClick={() => setAddServiceModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Package Title</label>
-                <input type="text" placeholder="e.g. Dedicated Podcast Episode Sponsorship" className="cw-search-box" style={{ width: '100%' }} id="new-pkg-title" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Price (INR)</label>
-                  <input type="number" placeholder="15000" className="cw-search-box" style={{ width: '100%' }} id="new-pkg-price" />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Delivery Days</label>
-                  <input type="number" placeholder="7" className="cw-search-box" style={{ width: '100%' }} id="new-pkg-days" />
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Deliverable Description</label>
-                <textarea rows={3} placeholder="What is included in this package..." className="cw-search-box" style={{ width: '100%', resize: 'vertical' }} id="new-pkg-desc" />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setAddServiceModalOpen(false)}>
-                  Cancel
-                </button>
-                <button 
-                  type="button" 
-                  className="cw-btn cw-btn-primary"
-                  onClick={() => {
-                    const title = (document.getElementById('new-pkg-title') as HTMLInputElement)?.value;
-                    const price = Number((document.getElementById('new-pkg-price') as HTMLInputElement)?.value) || 15000;
-                    const days = Number((document.getElementById('new-pkg-days') as HTMLInputElement)?.value) || 7;
-                    const desc = (document.getElementById('new-pkg-desc') as HTMLTextAreaElement)?.value || 'Tailored high-production deliverable';
-                    
-                    const newPkg: ServicePackage = {
-                      id: `pkg-${Date.now()}`,
-                      title: title || 'Custom Brand Showcase',
-                      tagline: desc,
-                      priceInINR: price,
-                      platform: 'Multi-Platform',
-                      deliveryDays: days,
-                      includedRevisions: 1,
-                      publishingIncluded: true,
-                      organicUsageDays: 30,
-                      paidUsageRightsIncluded: false,
-                      deliverables: [
-                        'Custom high-production showcase',
-                        '1 round of script review + 1 draft edit',
-                        'Pinned trackable link in description'
-                      ],
-                      bestFor: 'Brands wanting a focused product launch highlight'
-                    };
-                    setCreator({
-                      ...creator,
-                      packages: [...creator.packages, newPkg]
-                    });
-                    onShowToast(`Created service package: "${newPkg.title}"`);
-                    setAddServiceModalOpen(false);
-                  }}
-                >
-                  Publish Package
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Help & Creator Guide Modal */}
+      {/* 9. Help & Creator Guide Modal */}
       {helpModalOpen && (
         <div className="cw-tiers-modal-overlay" onClick={() => setHelpModalOpen(false)}>
           <div className="cw-tiers-modal" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>

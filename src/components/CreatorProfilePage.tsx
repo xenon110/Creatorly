@@ -20,12 +20,11 @@ import {
   X,
   Star,
   Search,
-  UserPlus,
-  LogOut,
-  UserCheck,
   Compass,
   LayoutDashboard,
-  Pause
+  Pause,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 
 interface CreatorProfilePageProps {
@@ -45,6 +44,7 @@ interface CreatorProfilePageProps {
   onNavigateToWorkspace?: any;
   previousView?: string;
   onNavigateToPage?: (slug: string) => void;
+  onMessageSubmitted?: (data: any) => void;
 }
 
 export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
@@ -61,8 +61,9 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
   onLogout,
   onOpenAuth,
   onNavigateToWorkspace,
-  previousView = 'creator-profile',
-  onNavigateToPage
+  previousView: _previousView = 'creator-profile',
+  onNavigateToPage,
+  onMessageSubmitted
 }) => {
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
   const [messageModalOpen, setMessageModalOpen] = useState(false);
@@ -97,7 +98,6 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
   // Split creator full name for stylized typography
   const nameParts = creator.fullName.split(' ');
   const firstName = nameParts[0] || 'Alex';
-  const lastName = nameParts.slice(1).join(' ') || 'Sharma';
   const isSpecificCreator = Boolean(creator && creator.id !== 'cr_alex_sharma' && creator.id !== 'alex-sharma' && creator.id !== 'default');
 
   // Collab Package Add-ons State
@@ -131,7 +131,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
   const handleChoosePackage = (pkgIndex: number) => {
     const basePkg = creator.packages[pkgIndex] || creator.packages[0];
     const basePrices = [5000, 8000, 3000];
-    const basePriceNum = basePrices[pkgIndex] || (typeof basePkg.price === 'number' ? basePkg.price : 5000);
+    const basePriceNum = basePrices[pkgIndex] || (typeof (basePkg as any).priceInINR === 'number' ? (basePkg as any).priceInINR : 5000);
     const selected = packageAddons[pkgIndex] || [];
     const extra = selected.reduce((sum, id) => {
       const addon = AVAILABLE_ADDONS.find((a) => a.id === id);
@@ -144,7 +144,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
 
     const customizedPkg: ServicePackage = {
       ...basePkg,
-      price: totalPrice,
+      priceInINR: totalPrice,
       deliverables: [
         ...basePkg.deliverables,
         ...addonNames.map((name) => `[Add-on] ${name}`)
@@ -158,47 +158,78 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
 
   // Section 2: Animated Stats on View
   const [animatedStats, setAnimatedStats] = useState({
-    community: 85,
-    views: 22,
-    engagement: 4.8,
-    targetMarket: 62,
+    community: 0,
+    views: 0,
+    engagement: 0,
+    targetMarket: 0,
   });
-  const [statsAnimated, setStatsAnimated] = useState(false);
 
   React.useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !statsAnimated) {
-          setStatsAnimated(true);
-          const targetCommunity = isSpecificCreator ? Math.round(creator.metrics.totalAudience / 1000) : 85;
-          const targetViews = isSpecificCreator ? Math.round(creator.metrics.averageViews / 1000) : 22;
-          const targetEng = isSpecificCreator ? creator.metrics.engagementRate : 4.8;
-          const targetMarket = isSpecificCreator ? creator.metrics.targetMarketPercentage : 62;
+    const targetCommunity = isSpecificCreator ? Math.round((creator?.metrics?.totalAudience || 85000) / 1000) : 85;
+    const targetViews = isSpecificCreator ? Math.round((creator?.metrics?.averageViews || 22000) / 1000) : 22;
+    const targetEng = isSpecificCreator ? (creator?.metrics?.engagementRate || 4.8) : 4.8;
+    const targetMarket = isSpecificCreator ? (creator?.metrics?.targetMarketPercentage || 62) : 62;
 
-          let step = 0;
-          const totalSteps = 25;
-          const timer = setInterval(() => {
-            step++;
-            const progress = step / totalSteps;
-            setAnimatedStats({
-              community: Math.round(targetCommunity * progress),
-              views: Math.round(targetViews * progress),
-              engagement: Math.round(targetEng * progress * 10) / 10,
-              targetMarket: Math.round(targetMarket * progress),
-            });
-            if (step >= totalSteps) {
-              clearInterval(timer);
-            }
-          }, 24);
+    let animFrameId: number;
+
+    const startCounting = () => {
+      let startTime: number | null = null;
+      const duration = 1200; // ms
+
+      const step = (timestamp: number) => {
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Easing: easeOutCubic
+        const ease = 1 - Math.pow(1 - progress, 3);
+
+        setAnimatedStats({
+          community: Math.round(targetCommunity * ease),
+          views: Math.round(targetViews * ease),
+          engagement: Math.round(targetEng * ease * 10) / 10,
+          targetMarket: Math.round(targetMarket * ease),
+        });
+
+        if (progress < 1) {
+          animFrameId = requestAnimationFrame(step);
         }
-      },
-      { threshold: 0.15 }
-    );
+      };
+
+      animFrameId = requestAnimationFrame(step);
+    };
 
     const sectionEl = document.querySelector('.fresh-numbers-section');
-    if (sectionEl) observer.observe(sectionEl);
-    return () => observer.disconnect();
-  }, [statsAnimated, isSpecificCreator, creator]);
+    if (!sectionEl) {
+      startCounting();
+      return () => {
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          startCounting();
+        } else {
+          // Reset numbers when scrolled out of view so it animates each time when scrolled into view
+          setAnimatedStats({
+            community: 0,
+            views: 0,
+            engagement: 0,
+            targetMarket: 0,
+          });
+        }
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    observer.observe(sectionEl);
+
+    return () => {
+      observer.disconnect();
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+    };
+  }, [isSpecificCreator, creator]);
 
   // Video Reel Simulator in Case Study Modal
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
@@ -383,34 +414,6 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
     },
   ];
 
-  // More talent creators on Creatorly
-  const moreTalentList = [
-    {
-      num: '01',
-      badgeColor: '#F472B6',
-      name: 'Aarohi Mehta',
-      niche: 'Food & city finds',
-      location: 'Mumbai, India',
-      avatarUrl: '/images/aarohi-mehta.jpg',
-    },
-    {
-      num: '02',
-      badgeColor: '#FB923C',
-      name: 'Maya James',
-      niche: 'Beauty & personal style',
-      location: 'London, UK',
-      avatarUrl: '/images/maya-james.jpg',
-    },
-    {
-      num: '03',
-      badgeColor: '#D4F754',
-      name: 'Jun Park',
-      niche: 'Everyday tech & life',
-      location: 'Seoul, South Korea',
-      avatarUrl: '/images/jun-park.jpg',
-    },
-  ];
-
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
@@ -440,37 +443,90 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             <button type="button" onClick={() => scrollToSection('more-creators')}>More creators</button>
           </nav>
 
-          {/* Right actions: Role Portals (Brand & Creator) + Say hello & Work together */}
+          {/* Right actions: Role Portals (Brand & Creator) + Login / Logout + Work together */}
           <div className="fresh-nav-actions">
-            {/* Small two role navigation buttons corresponding to Image 1 & Image 2 */}
-            <div className="nav-portal-group">
-              <button
-                type="button"
-                className="nav-btn-portal nav-btn-brand"
-                onClick={() => {
-                  if (onNavigateToMarketplace) onNavigateToMarketplace();
-                  else if (_onBackToMarketplace) _onBackToMarketplace();
-                }}
-                title="Enter Brand / Client Discovery Marketplace"
-                aria-label="Brand Marketplace"
-              >
-                <Compass size={13} />
-                <span>For Brands</span>
-              </button>
+            {currentUser ? (
+              <div className="nav-portal-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {currentUser.role === 'creator' ? (
+                  <button
+                    type="button"
+                    className="nav-btn-portal nav-btn-creator"
+                    onClick={() => {
+                      if (onNavigateToWorkspace) onNavigateToWorkspace();
+                    }}
+                    title="Enter Creator Workspace"
+                    aria-label="Creator Workspace"
+                  >
+                    <LayoutDashboard size={13} />
+                    <span>Workspace</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="nav-btn-portal nav-btn-brand"
+                    onClick={() => {
+                      if (onNavigateToMarketplace) onNavigateToMarketplace();
+                    }}
+                    title="Enter Brand Marketplace"
+                    aria-label="Brand Marketplace"
+                  >
+                    <Compass size={13} />
+                    <span>Discover</span>
+                  </button>
+                )}
 
-              <button
-                type="button"
-                className="nav-btn-portal nav-btn-creator"
-                onClick={() => {
-                  if (onNavigateToWorkspace) onNavigateToWorkspace();
-                }}
-                title="Enter Creator Workspace"
-                aria-label="Creator Workspace"
-              >
-                <LayoutDashboard size={13} />
-                <span>For Creators</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  className="nav-say-hello"
+                  onClick={() => onLogout && onLogout()}
+                  title="Sign out of your session"
+                  style={{ fontSize: '0.82rem', padding: '7px 14px' }}
+                >
+                  <LogOut size={13} />
+                  <span>Log out ({currentUser.name?.split(' ')[0] || 'User'})</span>
+                </button>
+              </div>
+            ) : (
+              <div className="nav-portal-group" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  className="nav-btn-portal nav-btn-brand"
+                  onClick={() => {
+                    if (onNavigateToMarketplace) onNavigateToMarketplace();
+                    else if (_onBackToMarketplace) _onBackToMarketplace();
+                  }}
+                  title="Enter Brand / Client Discovery Marketplace"
+                  aria-label="Brand Marketplace"
+                >
+                  <Compass size={13} />
+                  <span>For Brands</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="nav-btn-portal nav-btn-creator"
+                  onClick={() => {
+                    if (onNavigateToWorkspace) onNavigateToWorkspace();
+                  }}
+                  title="Enter Creator Workspace"
+                  aria-label="Creator Workspace"
+                >
+                  <LayoutDashboard size={13} />
+                  <span>For Creators</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="nav-say-hello"
+                  onClick={() => onOpenAuth && onOpenAuth('signin', 'creator')}
+                  title="Log in to your account"
+                  style={{ fontSize: '0.82rem', padding: '7px 14px' }}
+                >
+                  <LogIn size={13} />
+                  <span>Log in</span>
+                </button>
+              </div>
+            )}
 
             <button
               type="button"
@@ -485,29 +541,6 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
         </div>
       </header>
 
-      {/* Active profile switch banner if browsing another creator */}
-      {isSpecificCreator && (
-        <div className="active-profile-switch-bar">
-          <div className="fresh-content-container active-profile-flex">
-            <span className="switch-banner-text">
-              Currently previewing <strong>{creator.fullName}</strong>'s storefront profile ({creator.primaryNiche})
-            </span>
-            <button
-              type="button"
-              className="btn-switch-alex"
-              onClick={() => {
-                if (onSelectCreator && creators.length > 0) {
-                  const defaultTalent = creators.find(c => c.id === 'cr_alex_sharma' || c.id === 'alex-sharma') || creators[0];
-                  onSelectCreator(defaultTalent);
-                }
-              }}
-            >
-              ← Back to Main Marketplace
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ========================================================= */}
       {/* SECTION 1: CREATOR HERO (Photo 1)                         */}
       {/* ========================================================= */}
@@ -517,21 +550,21 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           <div className="hero-portrait-col">
             <div className="portrait-frame">
               <img
-                src={isSpecificCreator ? (creator.avatarUrl || '/images/alex-sharma.jpg') : '/images/platform-hero.jpg'}
-                alt={isSpecificCreator ? creator.fullName : "Creatorly — Where Brands Meet Creators"}
+                src={creator?.avatarUrl || '/images/alex-sharma.jpg'}
+                alt={creator?.fullName || "Creatorly — Where Brands Meet Creators"}
                 className="portrait-image"
               />
 
               {/* Green round badge top-left */}
               <div className="badge-making-tech">
                 <Sparkles size={14} />
-                <span>{isSpecificCreator ? (creator.tagline || 'Making tech feel human.') : 'Where creativity meets impact.'}</span>
+                <span>{((creator as any)?.tagline || creator?.primaryNiche || 'Where creativity meets impact.')}</span>
               </div>
 
               {/* Bottom pill overlay */}
               <div className="pill-open-projects">
                 <span className="live-dot-green"></span>
-                <span>{isSpecificCreator ? 'Open to the right projects' : 'Open to brand collaborations'}</span>
+                <span>Open to brand collaborations</span>
               </div>
             </div>
           </div>
@@ -541,43 +574,33 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             {/* Top row with Eyebrow */}
             <div className="hero-eyebrow-row">
               <span className="fresh-eyebrow">
-                <span className="eyebrow-bullet">•</span> {isSpecificCreator ? `CREATOR SPOTLIGHT / ${creator.primaryNiche.toUpperCase()}` : 'WHERE BRANDS MEET CREATORS / VERIFIED PLATFORM'}
+                <span className="eyebrow-bullet">•</span> WHERE BRANDS MEET CREATORS / VERIFIED PLATFORM
               </span>
             </div>
 
-            {/* Giant Title: Slogan or Creator Name */}
-            {isSpecificCreator ? (
-              <h1 className="hero-title">
-                Meet<br />
-                {firstName}<span className="text-coral">.</span><br />
-                <span className="text-coral">{lastName}</span>
-              </h1>
-            ) : (
-              <h1 className="hero-title">
-                Where<br />
-                Brands<span className="text-coral">.</span><br />
-                <span className="text-coral">Meet Creators</span>
-              </h1>
-            )}
+            {/* Giant Title: Iconic Platform Motto */}
+            <h1 className="hero-title">
+              Where<br />
+              Brands<span className="text-coral">.</span><br />
+              <span className="text-coral">Meet Creators</span>
+            </h1>
 
             {/* Handle & Verified Badges */}
             <div className="hero-badges-row">
-              <span className="badge-handle">{isSpecificCreator ? creator.handle : '@creatorly'}</span>
-              <span className="badge-sample-profile">{isSpecificCreator ? '✓ VERIFIED CREATOR' : '✓ VERIFIED PLATFORM'}</span>
+              <span className="badge-handle">{creator?.handle || '@creatorly'}</span>
+              <span className="badge-sample-profile">✓ VERIFIED PLATFORM</span>
             </div>
 
             {/* Bio paragraph / Slogan description */}
             <p className="hero-bio-text">
-              {isSpecificCreator
-                ? (creator.bio || 'Making technology feel less like tech support. Honest reviews, useful tutorials, and big ideas made simple.')
-                : 'The curated marketplace connecting high-growth brands with verified creators. Authentic storytelling, transparent deliverables, and milestone-protected escrow payouts.'}
+              The curated marketplace connecting high-growth brands with verified creators. Authentic storytelling, transparent deliverables, and milestone-protected escrow payouts.
             </p>
 
             {/* Senior UX / Relatable: Creator SLA & Escrow Strip */}
             <div className="hero-sla-strip">
               <div className="sla-item">
                 <span className="sla-dot-pulse"></span>
-                <span><strong>{isSpecificCreator ? '2 slots open' : '500+ creators'}</strong> {isSpecificCreator ? 'for Oct / Nov' : 'actively open'}</span>
+                <span><strong>500+ creators</strong> actively open</span>
               </div>
               <div className="sla-divider">•</div>
               <div className="sla-item">
@@ -1183,7 +1206,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                       <span className="talent-stat-reach">{Math.round(c.metrics.totalAudience / 1000)}k reach</span>
                       <span className="talent-stat-dot">•</span>
                       <span className="talent-stat-eng">{c.metrics.engagementRate}% ER</span>
-                      <span className="talent-stat-price">From ₹{c.packages[0]?.price?.toLocaleString() || '3,000'}</span>
+                      <span className="talent-stat-price">From ₹{c.packages[0]?.priceInINR?.toLocaleString() || '3,000'}</span>
                     </div>
 
                     <div className="talent-card-actions">
@@ -1448,13 +1471,37 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             <div className="footer-legal-copy">
               <span>© {new Date().getFullYear()} Creatorly Technologies Inc. All rights reserved.</span>
               <span className="legal-dot">•</span>
-              <button type="button" className="legal-link-btn" onClick={() => onShowToast('Creatorly Privacy Policy: GDPR & SOC-2 compliant')}>Privacy Policy</button>
+              <button
+                type="button"
+                className="legal-link-btn"
+                onClick={() => onNavigateToPage ? onNavigateToPage('about-creatorly') : onShowToast('Creatorly Privacy Policy: GDPR & SOC-2 compliant')}
+              >
+                Privacy Policy
+              </button>
               <span className="legal-dot">•</span>
-              <button type="button" className="legal-link-btn" onClick={() => onShowToast('Creatorly Terms of Service: Standard marketplace terms')}>Terms of Service</button>
+              <button
+                type="button"
+                className="legal-link-btn"
+                onClick={() => onNavigateToPage ? onNavigateToPage('creator-standards') : onShowToast('Creatorly Terms of Service: Standard marketplace terms')}
+              >
+                Terms of Service
+              </button>
               <span className="legal-dot">•</span>
-              <button type="button" className="legal-link-btn" onClick={() => onShowToast('Creatorly Milestone Escrow Agreement: Bank-grade fund protection')}>Escrow Agreement</button>
+              <button
+                type="button"
+                className="legal-link-btn"
+                onClick={() => onNavigateToPage ? onNavigateToPage('how-escrow-works') : onShowToast('Creatorly Milestone Escrow Agreement: Bank-grade fund protection')}
+              >
+                Escrow Agreement
+              </button>
               <span className="legal-dot">•</span>
-              <button type="button" className="legal-link-btn" onClick={() => onShowToast('Cookie preferences updated')}>Cookie Preferences</button>
+              <button
+                type="button"
+                className="legal-link-btn"
+                onClick={() => onShowToast('Cookie preferences saved: All analytical & functional cookies active')}
+              >
+                Cookie Preferences
+              </button>
             </div>
 
             <button
@@ -1496,6 +1543,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           onClose={() => setMessageModalOpen(false)}
           creator={creator}
           onShowToast={onShowToast}
+          onMessageSubmitted={onMessageSubmitted}
         />
       )}
 
@@ -2262,7 +2310,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
         /* HERO SECTION                                              */
         /* ========================================================= */
         .fresh-hero-section {
-          padding: 56px 0 76px;
+          padding: 36px 0 52px;
           width: 100%;
           max-width: 100%;
           overflow: hidden;
@@ -2271,12 +2319,19 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
 
         .hero-grid {
           display: grid;
-          grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
-          gap: clamp(28px, 4vw, 64px);
+          grid-template-columns: minmax(360px, 520px) minmax(0, 1fr);
+          gap: clamp(32px, 4.5vw, 68px);
           align-items: center;
           width: 100%;
           max-width: 100%;
           box-sizing: border-box;
+        }
+
+        @media (min-width: 1280px) {
+          .hero-grid {
+            grid-template-columns: 530px minmax(0, 1fr);
+            gap: 60px;
+          }
         }
 
         .hero-info-col {
@@ -2297,38 +2352,35 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
         .portrait-frame {
           position: relative;
           width: 100%;
-          max-width: 460px;
+          max-width: 530px;
           aspect-ratio: 1 / 1.05;
-          border-radius: 24px;
+          border-radius: 26px;
           overflow: visible;
           margin: 0;
         }
 
         @media (max-width: 990px) {
           .portrait-frame {
-            max-width: 420px;
+            max-width: 440px;
             margin: 0 auto;
           }
-        }
-          overflow: visible;
-          margin: 0;
         }
 
         .portrait-image {
           width: 100%;
           height: 100%;
           object-fit: cover;
-          border-radius: 24px;
-          box-shadow: 0 20px 52px -12px rgba(0, 0, 0, 0.14);
+          border-radius: 26px;
+          box-shadow: 0 24px 56px -12px rgba(0, 0, 0, 0.16);
         }
 
         /* Overlapping Green Round Sticker */
         .badge-making-tech {
           position: absolute;
-          top: -20px;
+          top: -22px;
           left: -22px;
-          width: 104px;
-          height: 104px;
+          width: 110px;
+          height: 110px;
           border-radius: 50%;
           background: #BEF264;
           color: #18191E;
@@ -2337,11 +2389,11 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           align-items: center;
           justify-content: center;
           text-align: center;
-          font-size: 0.68rem;
+          font-size: 0.7rem;
           font-weight: 700;
           line-height: 1.25;
-          padding: 8px;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+          padding: 10px;
+          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
           z-index: 5;
         }
 
@@ -2419,12 +2471,12 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
         }
 
         .hero-title {
-          font-size: clamp(3.4rem, 6vw, 5.6rem);
+          font-size: clamp(3.5rem, 5.2vw, 5.4rem);
           font-weight: 900;
-          line-height: 0.95;
+          line-height: 0.96;
           letter-spacing: -0.04em;
           color: #18191E;
-          margin: 0 0 20px;
+          margin: 0 0 18px;
         }
 
         .hero-badges-row {
@@ -2454,11 +2506,11 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
         }
 
         .hero-bio-text {
-          font-size: 1.15rem;
+          font-size: 1.18rem;
           color: #3F3F46;
-          line-height: 1.6;
-          max-width: 680px;
-          margin: 0 0 20px;
+          line-height: 1.62;
+          max-width: 800px;
+          margin: 0 0 22px;
         }
 
         /* Senior UX: SLA strip */
@@ -2466,14 +2518,14 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           display: inline-flex;
           align-items: center;
           flex-wrap: wrap;
-          gap: 12px;
+          gap: 14px;
           background: #F4EFE6;
           border: 1px solid #E5DEC9;
-          padding: 8px 14px;
-          border-radius: 10px;
-          font-size: 0.8rem;
+          padding: 9px 18px;
+          border-radius: 12px;
+          font-size: 0.84rem;
           color: #374151;
-          margin-bottom: 20px;
+          margin-bottom: 22px;
         }
 
         .sla-item {
@@ -2571,6 +2623,57 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           cursor: pointer;
         }
 
+        /* Quick Niche Discovery Filter Bar */
+        .hero-niche-quickbar {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+          width: 100%;
+          max-width: 820px;
+        }
+
+        .niche-quickbar-label {
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: #71717A;
+          white-space: nowrap;
+        }
+
+        .niche-quickbar-tags {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .niche-tag-btn {
+          background: #FFFFFF;
+          border: 1px solid #E4E4E7;
+          color: #3F3F46;
+          font-size: 0.78rem;
+          font-weight: 600;
+          padding: 5px 12px;
+          border-radius: 9999px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .niche-tag-btn:hover {
+          border-color: #18191E;
+          color: #18191E;
+          background: #FAF9F6;
+        }
+
+        .niche-tag-btn.active {
+          background: #18191E;
+          color: #FFFFFF;
+          border-color: #18191E;
+        }
+
         /* Senior UX: Brand collaborations ribbon */
         .hero-brands-ribbon {
           display: flex;
@@ -2578,7 +2681,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           gap: 12px;
           margin-bottom: 14px;
           width: 100%;
-          max-width: 100%;
+          max-width: 820px;
           min-width: 0;
           overflow: hidden;
           box-sizing: border-box;
@@ -2590,16 +2693,37 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           letter-spacing: 0.05em;
           text-transform: uppercase;
           color: #71717A;
+          white-space: nowrap;
         }
 
-        .brands-ribbon-pills {
+        .brands-marquee-wrap {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          position: relative;
+          mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 24px), transparent);
+          -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 24px), transparent);
+        }
+
+        .brands-marquee-track {
           display: flex;
           align-items: center;
-          flex-wrap: wrap;
-          gap: 8px;
+          gap: 10px;
+          width: max-content;
+          animation: brandsMarquee 34s linear infinite;
         }
 
-        .brand-pill {
+        .brands-marquee-track:hover {
+          animation-play-state: paused;
+        }
+
+        @keyframes brandsMarquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+
+        .brand-pill.marquee-pill {
+          white-space: nowrap;
           background: #FFFFFF;
           border: 1px solid #E5E1D8;
           border-radius: 6px;
@@ -2608,37 +2732,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           font-weight: 600;
           color: #27272A;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-        }
-
-        .btn-make-something {
-          background: #18191E;
-          color: #FFFFFF;
-          border: none;
-          padding: 14px 26px;
-          border-radius: 10px;
-          font-size: 0.95rem;
-          font-weight: 700;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          transition: background 0.15s ease;
-        }
-
-        .btn-make-something:hover {
-          background: #000000;
-        }
-
-        .btn-see-work {
-          background: none;
-          border: none;
-          font-size: 0.875rem;
-          font-weight: 600;
-          color: #18191E;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          cursor: pointer;
+          display: inline-block;
         }
 
         .hero-microcopy {

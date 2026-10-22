@@ -743,8 +743,8 @@ export const CreatorInbox: React.FC<CreatorInboxProps> = ({
               {mainViewTab === 'creators'
                 ? 'Discover & Hire Verified Creators'
                 : perspective === 'creator'
-                ? 'Your Offers, Work In Progress & Payments'
-                : 'Track Your Creator Offers & Video Campaigns'}
+                  ? 'Your Offers, Work In Progress & Payments'
+                  : 'Track Your Creator Offers & Video Campaigns'}
             </h2>
             <p className="pipeline-subtitle">
               {mainViewTab === 'creators'
@@ -1087,410 +1087,410 @@ export const CreatorInbox: React.FC<CreatorInboxProps> = ({
               )}
             </div>
 
-        {/* ========================================================= */}
-        {/* VIEW 1: KANBAN 5-STAGE PIPELINE BOARD                    */}
-        {/* ========================================================= */}
-        {viewMode === 'kanban' && (
-          <div className="kanban-pipeline-grid">
-            {kanbanStages.map((col) => {
-              const stageRequests = filteredRequests.filter(r => getEffectiveStage(r) === col.stage);
-              const stageTotalBudget = stageRequests.reduce((sum, r) => sum + r.budgetINR, 0);
+            {/* ========================================================= */}
+            {/* VIEW 1: KANBAN 5-STAGE PIPELINE BOARD                    */}
+            {/* ========================================================= */}
+            {viewMode === 'kanban' && (
+              <div className="kanban-pipeline-grid">
+                {kanbanStages.map((col) => {
+                  const stageRequests = filteredRequests.filter(r => getEffectiveStage(r) === col.stage);
+                  const stageTotalBudget = stageRequests.reduce((sum, r) => sum + r.budgetINR, 0);
 
-              return (
-                <div key={col.stage} className={`kanban-stage-col col-${col.stage}`}>
-                  {/* Column Header */}
-                  <div className="kanban-col-header">
-                    <div className="col-header-top">
-                      <div className="col-title-wrap" style={{ color: col.color }}>
-                        {col.icon}
-                        <h4>{col.title}</h4>
+                  return (
+                    <div key={col.stage} className={`kanban-stage-col col-${col.stage}`}>
+                      {/* Column Header */}
+                      <div className="kanban-col-header">
+                        <div className="col-header-top">
+                          <div className="col-title-wrap" style={{ color: col.color }}>
+                            {col.icon}
+                            <h4>{col.title}</h4>
+                          </div>
+                          <span className="col-count-pill">{stageRequests.length}</span>
+                        </div>
+                        <div className="col-header-sub">
+                          <span>{col.subtitle}</span>
+                          <strong className="col-budget-val">{formatCurrency(stageTotalBudget, currentCurrency)}</strong>
+                        </div>
                       </div>
-                      <span className="col-count-pill">{stageRequests.length}</span>
+
+                      {/* Column Deals Stack */}
+                      <div className="kanban-cards-stack">
+                        {stageRequests.length === 0 ? (
+                          <div className="kanban-empty-drop">
+                            <span>No deals in this stage</span>
+                          </div>
+                        ) : (
+                          stageRequests.map((req) => {
+                            const isSelected = selectedRequest?.id === req.id;
+                            return (
+                              <div
+                                key={req.id}
+                                className={`kanban-deal-card card ${isSelected ? 'selected' : ''}`}
+                                onClick={() => setSelectedRequest(req)}
+                              >
+                                {/* Card Top: Ref ID & Escrow Pill */}
+                                <div className="deal-card-top">
+                                  <span className="deal-ref-id">{req.id}</span>
+                                  {req.escrowStatus === 'held' && (
+                                    <span className="escrow-status-pill locked" title="Funds deposited in vault">
+                                      <Lock size={10} /> Escrow Locked
+                                    </span>
+                                  )}
+                                  {req.escrowStatus === 'released' && (
+                                    <span className="escrow-status-pill released" title="Payout released">
+                                      <Check size={10} /> Escrow Released
+                                    </span>
+                                  )}
+                                  {(!req.escrowStatus || req.escrowStatus === 'unfunded') && req.status === 'accepted' && (
+                                    <span className="escrow-status-pill pending">
+                                      Awaiting Deposit
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Brand & Creator strip */}
+                                <div className="deal-ident-row">
+                                  <div className="deal-brand-meta">
+                                    <span className="deal-brand-label">Brand:</span>
+                                    <strong className="deal-brand-name">{req.brandName}</strong>
+                                  </div>
+                                  <div className="deal-creator-badge" onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onSelectCreator) {
+                                      const c = creators.find(cr => cr.id === req.creatorId);
+                                      if (c) onSelectCreator(c);
+                                    }
+                                  }}>
+                                    <img src={req.creatorAvatar} alt={req.creatorName} className="creator-mini-avatar" />
+                                    <span>{req.creatorName}</span>
+                                  </div>
+                                </div>
+
+                                {/* Service title & Price */}
+                                <div className="deal-service-box">
+                                  <span className="service-title">{req.serviceTitle}</span>
+                                  <strong className="service-price">{formatCurrency(req.budgetINR, currentCurrency)}</strong>
+                                </div>
+
+                                {/* Stage-specific micro status */}
+                                {col.stage === 'proposal' && (
+                                  <div className="stage-micro-status">
+                                    {req.counterOfferINR ? (
+                                      <span className="micro-tag alert">
+                                        Counter Quote: {formatCurrency(req.counterOfferINR, currentCurrency)}
+                                      </span>
+                                    ) : (
+                                      <span className="micro-tag">Awaiting Scope Review</span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {col.stage === 'script_signoff' && req.scriptOutline && (
+                                  <div className="stage-micro-status">
+                                    <span className={`micro-tag ${req.scriptOutline.status === 'submitted' ? 'warning' : 'success'}`}>
+                                      Script: {req.scriptOutline.status === 'submitted' ? 'Awaiting Signoff' : 'Approved'}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {col.stage === 'draft_review' && req.videoDraft && (
+                                  <div className="stage-micro-status">
+                                    <span className={`micro-tag ${req.videoDraft.status === 'submitted' ? 'cyan' : 'success'}`}>
+                                      Video v{req.videoDraft.version}: {req.videoDraft.status === 'submitted' ? 'Ready for Review' : 'Approved'}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {col.stage === 'live_completed' && req.publishedDeliverable && (
+                                  <div className="stage-micro-status">
+                                    <a
+                                      href={req.publishedDeliverable.liveUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="micro-link"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <span>View Live Link</span>
+                                      <ExternalLink size={10} />
+                                    </a>
+                                  </div>
+                                )}
+
+                                {/* Card Footer: Fast Action Button */}
+                                <div className="deal-card-footer" onClick={(e) => e.stopPropagation()}>
+                                  {/* Perspective-based primary button */}
+                                  {col.stage === 'proposal' && (
+                                    perspective === 'creator' ? (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action primary"
+                                        onClick={() => handleCreatorAccept(req)}
+                                      >
+                                        Accept Brief
+                                      </button>
+                                    ) : req.counterOfferINR ? (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action primary"
+                                        onClick={() => handleBrandAcceptCounterQuote(req)}
+                                      >
+                                        Accept Quote ({formatCurrency(req.counterOfferINR, currentCurrency)})
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action secondary"
+                                        onClick={() => setSelectedRequest(req)}
+                                      >
+                                        View Brief
+                                      </button>
+                                    )
+                                  )}
+
+                                  {col.stage === 'escrow_funding' && (
+                                    perspective === 'brand' ? (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action deposit"
+                                        onClick={() => setActiveEscrowModalReq(req)}
+                                      >
+                                        <Lock size={12} />
+                                        <span>Fund Escrow ({formatCurrency(req.budgetINR, currentCurrency)})</span>
+                                      </button>
+                                    ) : (
+                                      <span className="card-note-waiting">Awaiting Brand Escrow</span>
+                                    )
+                                  )}
+
+                                  {col.stage === 'script_signoff' && (
+                                    perspective === 'creator' ? (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action primary"
+                                        onClick={() => {
+                                          setActiveScriptModalReq(req);
+                                          setScriptHookInput(req.scriptOutline?.hook || '');
+                                          setScriptPointsInput(req.scriptOutline?.talkingPoints.join('\n') || '');
+                                        }}
+                                      >
+                                        <FileText size={12} />
+                                        <span>{req.scriptOutline ? 'Edit Script' : 'Submit Script'}</span>
+                                      </button>
+                                    ) : req.scriptOutline && req.scriptOutline.status === 'submitted' ? (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action approve"
+                                        onClick={() => handleBrandApproveScript(req)}
+                                      >
+                                        <Check size={12} />
+                                        <span>Approve Script</span>
+                                      </button>
+                                    ) : (
+                                      <span className="card-note-waiting">Creator Drafting Concept</span>
+                                    )
+                                  )}
+
+                                  {col.stage === 'draft_review' && (
+                                    perspective === 'creator' ? (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action primary"
+                                        onClick={() => {
+                                          setActiveDraftModalReq(req);
+                                        }}
+                                      >
+                                        <Video size={12} />
+                                        <span>Upload 4K Draft</span>
+                                      </button>
+                                    ) : req.videoDraft && req.videoDraft.status === 'submitted' ? (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action approve"
+                                        onClick={() => handleBrandApproveDraft(req)}
+                                      >
+                                        <Check size={12} />
+                                        <span>Approve Draft Cut</span>
+                                      </button>
+                                    ) : (
+                                      <span className="card-note-waiting">Creator in Studio</span>
+                                    )
+                                  )}
+
+                                  {col.stage === 'live_completed' && (
+                                    req.status === 'completed' ? (
+                                      <span className="card-note-completed">
+                                        <Check size={12} /> Completed & Reviewed
+                                      </span>
+                                    ) : perspective === 'creator' ? (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action primary"
+                                        onClick={() => setActiveLiveModalReq(req)}
+                                      >
+                                        Submit Live URL
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="btn-card-action release"
+                                        onClick={() => setActiveReviewModalReq(req)}
+                                      >
+                                        <Star size={12} />
+                                        <span>Release & Review</span>
+                                      </button>
+                                    )
+                                  )}
+
+                                  {/* Simulate next step button */}
+                                  <button
+                                    type="button"
+                                    className="btn-card-sim"
+                                    title="Fast-forward test simulation"
+                                    onClick={() => handleFastForwardDemo(req)}
+                                  >
+                                    <Zap size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
-                    <div className="col-header-sub">
-                      <span>{col.subtitle}</span>
-                      <strong className="col-budget-val">{formatCurrency(stageTotalBudget, currentCurrency)}</strong>
-                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ========================================================= */}
+            {/* VIEW 2: LIST / STACK VIEW                                 */}
+            {/* ========================================================= */}
+            {viewMode === 'list' && (
+              <div className="list-pipeline-stack">
+                {filteredRequests.length === 0 ? (
+                  <div className="inbox-empty-state">
+                    <Inbox size={42} className="empty-inbox-icon" />
+                    <h3>No requests found in this view</h3>
+                    <p>Try switching perspectives or clearing search filters to see all collaboration deals.</p>
                   </div>
+                ) : (
+                  filteredRequests.map((req) => {
+                    const stage = getEffectiveStage(req);
+                    return (
+                      <div key={req.id} className={`list-deal-card card stage-${stage}`}>
+                        {/* Header line */}
+                        <div className="list-card-header">
+                          <div className="header-left">
+                            <div className="brand-ident-pill">
+                              <Building2 size={16} />
+                              <strong>{req.brandName}</strong>
+                            </div>
+                            <span className="ref-tag">{req.id}</span>
+                            <span className="time-tag">{req.submittedAt}</span>
+                          </div>
 
-                  {/* Column Deals Stack */}
-                  <div className="kanban-cards-stack">
-                    {stageRequests.length === 0 ? (
-                      <div className="kanban-empty-drop">
-                        <span>No deals in this stage</span>
-                      </div>
-                    ) : (
-                      stageRequests.map((req) => {
-                        const isSelected = selectedRequest?.id === req.id;
-                        return (
-                          <div
-                            key={req.id}
-                            className={`kanban-deal-card card ${isSelected ? 'selected' : ''}`}
+                          <div className="header-right">
+                            {/* Escrow badge */}
+                            {req.escrowStatus === 'held' && (
+                              <span className="escrow-pill locked">
+                                <Lock size={12} />
+                                <span>Escrow: {formatCurrency(req.budgetINR, currentCurrency)} Locked</span>
+                              </span>
+                            )}
+                            {req.escrowStatus === 'released' && (
+                              <span className="escrow-pill released">
+                                <Check size={12} />
+                                <span>Escrow Released</span>
+                              </span>
+                            )}
+                            <span className="stage-badge-pill">{stage.replace('_', ' ').toUpperCase()}</span>
+                          </div>
+                        </div>
+
+                        {/* Stepper on every list item */}
+                        <div className="list-stepper-row">
+                          <div className={`step-node ${stage === 'proposal' ? 'current' : 'done'}`}>
+                            <span className="dot">1</span>
+                            <span className="lbl">Brief & Scope</span>
+                          </div>
+                          <div className="line"></div>
+                          <div className={`step-node ${stage === 'escrow_funding' ? 'current' : stage !== 'proposal' ? 'done' : ''}`}>
+                            <span className="dot">2</span>
+                            <span className="lbl">Escrow Funding</span>
+                          </div>
+                          <div className="line"></div>
+                          <div className={`step-node ${stage === 'script_signoff' ? 'current' : (stage === 'draft_review' || stage === 'live_completed') ? 'done' : ''}`}>
+                            <span className="dot">3</span>
+                            <span className="lbl">Script Signoff</span>
+                          </div>
+                          <div className="line"></div>
+                          <div className={`step-node ${stage === 'draft_review' ? 'current' : stage === 'live_completed' ? 'done' : ''}`}>
+                            <span className="dot">4</span>
+                            <span className="lbl">4K Production</span>
+                          </div>
+                          <div className="line"></div>
+                          <div className={`step-node ${stage === 'live_completed' ? (req.status === 'completed' ? 'done' : 'current') : ''}`}>
+                            <span className="dot">5</span>
+                            <span className="lbl">Live & Released</span>
+                          </div>
+                        </div>
+
+                        {/* Meta Row */}
+                        <div className="list-meta-grid">
+                          <div>
+                            <span className="meta-lbl">Creator:</span>
+                            <strong>{req.creatorName} ({req.creatorHandle})</strong>
+                          </div>
+                          <div>
+                            <span className="meta-lbl">Service:</span>
+                            <strong>{req.serviceTitle}</strong>
+                          </div>
+                          <div>
+                            <span className="meta-lbl">Budget:</span>
+                            <strong className="text-emerald-600">{formatCurrency(req.budgetINR, currentCurrency)}</strong>
+                          </div>
+                          <div>
+                            <span className="meta-lbl">Target Delivery:</span>
+                            <span>{req.proposedDeadline}</span>
+                          </div>
+                        </div>
+
+                        {/* Brief snippet */}
+                        <p className="list-brief-snippet">
+                          <strong>Campaign Objective:</strong> {req.campaignObjective}
+                        </p>
+
+                        {/* Action controls */}
+                        <div className="list-actions-footer">
+                          <button
+                            type="button"
+                            className="btn-details-drawer"
                             onClick={() => setSelectedRequest(req)}
                           >
-                            {/* Card Top: Ref ID & Escrow Pill */}
-                            <div className="deal-card-top">
-                              <span className="deal-ref-id">{req.id}</span>
-                              {req.escrowStatus === 'held' && (
-                                <span className="escrow-status-pill locked" title="Funds deposited in vault">
-                                  <Lock size={10} /> Escrow Locked
-                                </span>
-                              )}
-                              {req.escrowStatus === 'released' && (
-                                <span className="escrow-status-pill released" title="Payout released">
-                                  <Check size={10} /> Escrow Released
-                                </span>
-                              )}
-                              {(!req.escrowStatus || req.escrowStatus === 'unfunded') && req.status === 'accepted' && (
-                                <span className="escrow-status-pill pending">
-                                  Awaiting Deposit
-                                </span>
-                              )}
-                            </div>
+                            <span>Open Deal Workspace & Audit Log</span>
+                            <ArrowRight size={14} />
+                          </button>
 
-                            {/* Brand & Creator strip */}
-                            <div className="deal-ident-row">
-                              <div className="deal-brand-meta">
-                                <span className="deal-brand-label">Brand:</span>
-                                <strong className="deal-brand-name">{req.brandName}</strong>
-                              </div>
-                              <div className="deal-creator-badge" onClick={(e) => {
-                                e.stopPropagation();
-                                if (onSelectCreator) {
-                                  const c = creators.find(cr => cr.id === req.creatorId);
-                                  if (c) onSelectCreator(c);
-                                }
-                              }}>
-                                <img src={req.creatorAvatar} alt={req.creatorName} className="creator-mini-avatar" />
-                                <span>{req.creatorName}</span>
-                              </div>
-                            </div>
-
-                            {/* Service title & Price */}
-                            <div className="deal-service-box">
-                              <span className="service-title">{req.serviceTitle}</span>
-                              <strong className="service-price">{formatCurrency(req.budgetINR, currentCurrency)}</strong>
-                            </div>
-
-                            {/* Stage-specific micro status */}
-                            {col.stage === 'proposal' && (
-                              <div className="stage-micro-status">
-                                {req.counterOfferINR ? (
-                                  <span className="micro-tag alert">
-                                    Counter Quote: {formatCurrency(req.counterOfferINR, currentCurrency)}
-                                  </span>
-                                ) : (
-                                  <span className="micro-tag">Awaiting Scope Review</span>
-                                )}
-                              </div>
-                            )}
-
-                            {col.stage === 'script_signoff' && req.scriptOutline && (
-                              <div className="stage-micro-status">
-                                <span className={`micro-tag ${req.scriptOutline.status === 'submitted' ? 'warning' : 'success'}`}>
-                                  Script: {req.scriptOutline.status === 'submitted' ? 'Awaiting Signoff' : 'Approved'}
-                                </span>
-                              </div>
-                            )}
-
-                            {col.stage === 'draft_review' && req.videoDraft && (
-                              <div className="stage-micro-status">
-                                <span className={`micro-tag ${req.videoDraft.status === 'submitted' ? 'cyan' : 'success'}`}>
-                                  Video v{req.videoDraft.version}: {req.videoDraft.status === 'submitted' ? 'Ready for Review' : 'Approved'}
-                                </span>
-                              </div>
-                            )}
-
-                            {col.stage === 'live_completed' && req.publishedDeliverable && (
-                              <div className="stage-micro-status">
-                                <a
-                                  href={req.publishedDeliverable.liveUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="micro-link"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <span>View Live Link</span>
-                                  <ExternalLink size={10} />
-                                </a>
-                              </div>
-                            )}
-
-                            {/* Card Footer: Fast Action Button */}
-                            <div className="deal-card-footer" onClick={(e) => e.stopPropagation()}>
-                              {/* Perspective-based primary button */}
-                              {col.stage === 'proposal' && (
-                                perspective === 'creator' ? (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action primary"
-                                    onClick={() => handleCreatorAccept(req)}
-                                  >
-                                    Accept Brief
-                                  </button>
-                                ) : req.counterOfferINR ? (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action primary"
-                                    onClick={() => handleBrandAcceptCounterQuote(req)}
-                                  >
-                                    Accept Quote ({formatCurrency(req.counterOfferINR, currentCurrency)})
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action secondary"
-                                    onClick={() => setSelectedRequest(req)}
-                                  >
-                                    View Brief
-                                  </button>
-                                )
-                              )}
-
-                              {col.stage === 'escrow_funding' && (
-                                perspective === 'brand' ? (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action deposit"
-                                    onClick={() => setActiveEscrowModalReq(req)}
-                                  >
-                                    <Lock size={12} />
-                                    <span>Fund Escrow ({formatCurrency(req.budgetINR, currentCurrency)})</span>
-                                  </button>
-                                ) : (
-                                  <span className="card-note-waiting">Awaiting Brand Escrow</span>
-                                )
-                              )}
-
-                              {col.stage === 'script_signoff' && (
-                                perspective === 'creator' ? (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action primary"
-                                    onClick={() => {
-                                      setActiveScriptModalReq(req);
-                                      setScriptHookInput(req.scriptOutline?.hook || '');
-                                      setScriptPointsInput(req.scriptOutline?.talkingPoints.join('\n') || '');
-                                    }}
-                                  >
-                                    <FileText size={12} />
-                                    <span>{req.scriptOutline ? 'Edit Script' : 'Submit Script'}</span>
-                                  </button>
-                                ) : req.scriptOutline && req.scriptOutline.status === 'submitted' ? (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action approve"
-                                    onClick={() => handleBrandApproveScript(req)}
-                                  >
-                                    <Check size={12} />
-                                    <span>Approve Script</span>
-                                  </button>
-                                ) : (
-                                  <span className="card-note-waiting">Creator Drafting Concept</span>
-                                )
-                              )}
-
-                              {col.stage === 'draft_review' && (
-                                perspective === 'creator' ? (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action primary"
-                                    onClick={() => {
-                                      setActiveDraftModalReq(req);
-                                    }}
-                                  >
-                                    <Video size={12} />
-                                    <span>Upload 4K Draft</span>
-                                  </button>
-                                ) : req.videoDraft && req.videoDraft.status === 'submitted' ? (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action approve"
-                                    onClick={() => handleBrandApproveDraft(req)}
-                                  >
-                                    <Check size={12} />
-                                    <span>Approve Draft Cut</span>
-                                  </button>
-                                ) : (
-                                  <span className="card-note-waiting">Creator in Studio</span>
-                                )
-                              )}
-
-                              {col.stage === 'live_completed' && (
-                                req.status === 'completed' ? (
-                                  <span className="card-note-completed">
-                                    <Check size={12} /> Completed & Reviewed
-                                  </span>
-                                ) : perspective === 'creator' ? (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action primary"
-                                    onClick={() => setActiveLiveModalReq(req)}
-                                  >
-                                    Submit Live URL
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="btn-card-action release"
-                                    onClick={() => setActiveReviewModalReq(req)}
-                                  >
-                                    <Star size={12} />
-                                    <span>Release & Review</span>
-                                  </button>
-                                )
-                              )}
-
-                              {/* Simulate next step button */}
-                              <button
-                                type="button"
-                                className="btn-card-sim"
-                                title="Fast-forward test simulation"
-                                onClick={() => handleFastForwardDemo(req)}
-                              >
-                                <Zap size={12} />
-                              </button>
-                            </div>
+                          <div className="quick-actions-cluster">
+                            <button
+                              type="button"
+                              className="btn-fast-sim"
+                              onClick={() => handleFastForwardDemo(req)}
+                              title="Simulate Next Step"
+                            >
+                              <Zap size={13} />
+                              <span>Simulate Next Step</span>
+                            </button>
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* VIEW 2: LIST / STACK VIEW                                 */}
-        {/* ========================================================= */}
-        {viewMode === 'list' && (
-          <div className="list-pipeline-stack">
-            {filteredRequests.length === 0 ? (
-              <div className="inbox-empty-state">
-                <Inbox size={42} className="empty-inbox-icon" />
-                <h3>No requests found in this view</h3>
-                <p>Try switching perspectives or clearing search filters to see all collaboration deals.</p>
-              </div>
-            ) : (
-              filteredRequests.map((req) => {
-                const stage = getEffectiveStage(req);
-                return (
-                  <div key={req.id} className={`list-deal-card card stage-${stage}`}>
-                    {/* Header line */}
-                    <div className="list-card-header">
-                      <div className="header-left">
-                        <div className="brand-ident-pill">
-                          <Building2 size={16} />
-                          <strong>{req.brandName}</strong>
                         </div>
-                        <span className="ref-tag">{req.id}</span>
-                        <span className="time-tag">{req.submittedAt}</span>
                       </div>
-
-                      <div className="header-right">
-                        {/* Escrow badge */}
-                        {req.escrowStatus === 'held' && (
-                          <span className="escrow-pill locked">
-                            <Lock size={12} />
-                            <span>Escrow: {formatCurrency(req.budgetINR, currentCurrency)} Locked</span>
-                          </span>
-                        )}
-                        {req.escrowStatus === 'released' && (
-                          <span className="escrow-pill released">
-                            <Check size={12} />
-                            <span>Escrow Released</span>
-                          </span>
-                        )}
-                        <span className="stage-badge-pill">{stage.replace('_', ' ').toUpperCase()}</span>
-                      </div>
-                    </div>
-
-                    {/* Stepper on every list item */}
-                    <div className="list-stepper-row">
-                      <div className={`step-node ${stage === 'proposal' ? 'current' : 'done'}`}>
-                        <span className="dot">1</span>
-                        <span className="lbl">Brief & Scope</span>
-                      </div>
-                      <div className="line"></div>
-                      <div className={`step-node ${stage === 'escrow_funding' ? 'current' : stage !== 'proposal' ? 'done' : ''}`}>
-                        <span className="dot">2</span>
-                        <span className="lbl">Escrow Funding</span>
-                      </div>
-                      <div className="line"></div>
-                      <div className={`step-node ${stage === 'script_signoff' ? 'current' : (stage === 'draft_review' || stage === 'live_completed') ? 'done' : ''}`}>
-                        <span className="dot">3</span>
-                        <span className="lbl">Script Signoff</span>
-                      </div>
-                      <div className="line"></div>
-                      <div className={`step-node ${stage === 'draft_review' ? 'current' : stage === 'live_completed' ? 'done' : ''}`}>
-                        <span className="dot">4</span>
-                        <span className="lbl">4K Production</span>
-                      </div>
-                      <div className="line"></div>
-                      <div className={`step-node ${stage === 'live_completed' ? (req.status === 'completed' ? 'done' : 'current') : ''}`}>
-                        <span className="dot">5</span>
-                        <span className="lbl">Live & Released</span>
-                      </div>
-                    </div>
-
-                    {/* Meta Row */}
-                    <div className="list-meta-grid">
-                      <div>
-                        <span className="meta-lbl">Creator:</span>
-                        <strong>{req.creatorName} ({req.creatorHandle})</strong>
-                      </div>
-                      <div>
-                        <span className="meta-lbl">Service:</span>
-                        <strong>{req.serviceTitle}</strong>
-                      </div>
-                      <div>
-                        <span className="meta-lbl">Budget:</span>
-                        <strong className="text-emerald-600">{formatCurrency(req.budgetINR, currentCurrency)}</strong>
-                      </div>
-                      <div>
-                        <span className="meta-lbl">Target Delivery:</span>
-                        <span>{req.proposedDeadline}</span>
-                      </div>
-                    </div>
-
-                    {/* Brief snippet */}
-                    <p className="list-brief-snippet">
-                      <strong>Campaign Objective:</strong> {req.campaignObjective}
-                    </p>
-
-                    {/* Action controls */}
-                    <div className="list-actions-footer">
-                      <button
-                        type="button"
-                        className="btn-details-drawer"
-                        onClick={() => setSelectedRequest(req)}
-                      >
-                        <span>Open Deal Workspace & Audit Log</span>
-                        <ArrowRight size={14} />
-                      </button>
-
-                      <div className="quick-actions-cluster">
-                        <button
-                          type="button"
-                          className="btn-fast-sim"
-                          onClick={() => handleFastForwardDemo(req)}
-                          title="Simulate Next Step"
-                        >
-                          <Zap size={13} />
-                          <span>Simulate Next Step</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+                    );
+                  })
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
-        </>
-      )}
 
         {/* ========================================================= */}
         {/* DEAL DETAIL SLIDE-OVER DRAWER                             */}

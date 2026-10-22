@@ -7,6 +7,14 @@ interface MessageModalProps {
   onClose: () => void;
   creator: CreatorProfile;
   onShowToast: (msg: string) => void;
+  onMessageSubmitted?: (data: {
+    topic: string;
+    brandName: string;
+    contactEmail: string;
+    message: string;
+    referenceId: string;
+    creator: CreatorProfile;
+  }) => void;
 }
 
 export const MessageModal: React.FC<MessageModalProps> = ({
@@ -14,6 +22,7 @@ export const MessageModal: React.FC<MessageModalProps> = ({
   onClose,
   creator,
   onShowToast,
+  onMessageSubmitted,
 }) => {
   const [topic, setTopic] = useState('Custom Campaign Quote');
   const [brandName, setBrandName] = useState('');
@@ -53,6 +62,14 @@ export const MessageModal: React.FC<MessageModalProps> = ({
       setInquiryRef(ref);
       setIsSubmitting(false);
       setSubmitted(true);
+      onMessageSubmitted?.({
+        topic,
+        brandName,
+        contactEmail,
+        message,
+        referenceId: ref,
+        creator
+      });
       onShowToast(`Message delivered to ${creator.fullName}! Inquiry ref: ${ref}`);
     }, 700);
   };

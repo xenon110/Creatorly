@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { AuthUser, UserRole } from '../types/creator';
 import { CreatorlyLogo } from './CreatorlyLogo';
+import { signInWithSupabase, signUpWithSupabase } from '../lib/supabaseClient';
 import {
   Mail,
   Lock,
@@ -33,6 +34,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [role, setRole] = useState<UserRole>(initialRole);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (initialRole) setRole(initialRole);
@@ -82,7 +84,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     onShowToast('Logged in as User / Brand: Razorpay Growth Team');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -91,54 +93,59 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
-    if (!password || password.length < 4) {
-      setErrorMessage('Password must be at least 4 characters.');
+    if (!password || password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters.');
       return;
     }
 
-    const destination = (role === 'creator') ? 'workspace' : 'discover';
+    const destination = targetDestination || ((role === 'creator') ? 'workspace' : 'discover');
+    setIsSubmitting(true);
 
-    if (tab === 'signup') {
-      if (role === 'creator' && !fullName.trim()) {
-        setErrorMessage('Please enter your full creator name.');
-        return;
+    try {
+      if (tab === 'signup') {
+        if (role === 'creator' && !fullName.trim()) {
+          setErrorMessage('Please enter your full creator name.');
+          setIsSubmitting(false);
+          return;
+        }
+        if (role === 'brand' && !companyName.trim()) {
+          setErrorMessage('Please enter your company / brand name.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        const { user: newUser, error } = await signUpWithSupabase(email, password, {
+          name: role === 'creator' ? fullName.trim() : companyName.trim(),
+          role,
+          handle: role === 'creator' ? (handle.startsWith('@') ? handle.trim() : `@${handle.trim() || 'creator'}`) : undefined,
+          companyName: role === 'brand' ? companyName.trim() : undefined,
+          niche: role === 'creator' ? niche : undefined
+        });
+
+        if (error || !newUser) {
+          setErrorMessage(error || 'Failed to create account.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        onLoginSuccess(newUser, destination);
+        onShowToast(`Account created! Welcome to Creatorly, ${newUser.name}.`);
+      } else {
+        const { user: signedInUser, error } = await signInWithSupabase(email, password, role);
+
+        if (error || !signedInUser) {
+          setErrorMessage(error || 'Invalid email or password.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        onLoginSuccess(signedInUser, destination);
+        onShowToast(`Signed in successfully as ${signedInUser.name}!`);
       }
-      if (role === 'brand' && !companyName.trim()) {
-        setErrorMessage('Please enter your company / brand name.');
-        return;
-      }
-
-      const newUser: AuthUser = {
-        id: `user-${Date.now()}`,
-        name: role === 'creator' ? fullName : companyName,
-        email,
-        role,
-        handle: role === 'creator' ? (handle.startsWith('@') ? handle : `@${handle || 'creator'}`) : undefined,
-        companyName: role === 'brand' ? companyName : undefined,
-        niche: role === 'creator' ? niche : undefined,
-        avatarUrl: role === 'creator'
-          ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'
-          : 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=200&auto=format&fit=crop&q=80',
-        verified: true
-      };
-
-      onLoginSuccess(newUser, destination);
-      onShowToast(`Account created! Welcome to Creatorly, ${newUser.name}.`);
-    } else {
-      const signedInUser: AuthUser = {
-        id: `user-${Date.now()}`,
-        name: role === 'creator' ? (fullName || 'Alex Sharma') : (companyName || 'Acme Brand Co.'),
-        email,
-        role,
-        handle: role === 'creator' ? '@alexsharma' : undefined,
-        companyName: role === 'brand' ? 'Acme Brand Co.' : undefined,
-        avatarUrl: role === 'creator' ? '/images/alex-sharma.jpg' : 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=200&auto=format&fit=crop&q=80',
-        niche: 'Technology',
-        verified: true
-      };
-
-      onLoginSuccess(signedInUser, destination);
-      onShowToast(`Signed in successfully as ${signedInUser.name}!`);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'An unexpected error occurred.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -396,11 +403,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </div>
 
               {/* Submit Button */}
-              <button type="submit" className="btn-main-auth-submit">
+              <button type="submit" className="btn-main-auth-submit" disabled={isSubmitting}>
                 <span>
-                  {tab === 'signin'
-                    ? (role === 'creator' ? 'Sign In as Creator' : 'Sign In as User / Brand')
-                    : (role === 'creator' ? 'Create Creator Account' : 'Register User / Brand Account')}
+                  {isSubmitting
+                    ? (tab === 'signin' ? 'Authenticating...' : 'Creating Account...')
+                    : (tab === 'signin'
+                      ? (role === 'creator' ? 'Sign In as Creator' : 'Sign In as User / Brand')
+                      : (role === 'creator' ? 'Create Creator Account' : 'Register User / Brand Account'))}
                 </span>
                 <ArrowRight size={17} />
               </button>

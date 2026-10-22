@@ -1460,7 +1460,7 @@ export const INITIAL_COLLABORATION_REQUESTS: CollaborationRequest[] = [
   },
   {
     id: 'REQ-102',
-    creatorId: 'creator-alex-sharma',
+    creatorId: 'cr_alex_sharma',
     creatorName: 'Alex Sharma',
     creatorAvatar: '/images/alex-sharma.jpg',
     creatorHandle: '@alexbuilds',
@@ -1574,7 +1574,7 @@ export const INITIAL_COLLABORATION_REQUESTS: CollaborationRequest[] = [
   },
   {
     id: 'REQ-105',
-    creatorId: 'creator-alex-sharma',
+    creatorId: 'cr_alex_sharma',
     creatorName: 'Alex Sharma',
     creatorAvatar: '/images/alex-sharma.jpg',
     creatorHandle: '@alexbuilds',

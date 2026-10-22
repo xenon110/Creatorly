@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type {
   CreatorProfile,
   CurrencyCode,
@@ -10,6 +10,17 @@ import type {
   UserRole
 } from './types/creator';
 import { ALL_CREATORS, INITIAL_COLLABORATION_REQUESTS } from './data/mockCreatorsList';
+import { 
+  fetchCreatorsFromSupabase, 
+  saveCreatorToSupabase, 
+  fetchCollaborationRequestsFromSupabase, 
+  saveCollaborationRequestToSupabase,
+  saveUserToSupabase,
+  subscribeToCollaborationRequests,
+  signOutFromSupabase,
+  getSupabaseSessionUser,
+  onAuthStateChange
+} from './lib/supabaseClient';
 import { GlobalNavbar } from './components/GlobalNavbar';
 import { SmartMatchSection } from './components/SmartMatchSection';
 import { DiscoverDirectory } from './components/DiscoverDirectory';
@@ -66,6 +77,62 @@ export const App: React.FC = () => {
     setToastMessage(msg);
   };
 
+  // Sync initial live state from Supabase database
+  useEffect(() => {
+    fetchCreatorsFromSupabase().then((liveCreators) => {
+      if (liveCreators && liveCreators.length > 0) {
+        setCreators(liveCreators);
+        setSelectedCreator(liveCreators[0]);
+        console.info(`[Creatorly] Loaded ${liveCreators.length} verified creators from Supabase.`);
+      }
+    });
+
+    fetchCollaborationRequestsFromSupabase().then((liveRequests) => {
+      if (liveRequests && liveRequests.length > 0) {
+        setCollaborationRequests(liveRequests);
+        console.info(`[Creatorly] Loaded ${liveRequests.length} active deals from Supabase.`);
+      }
+    });
+
+    // Realtime subscription for cross-tab / cross-device synchronized pipeline
+    const unsubscribe = subscribeToCollaborationRequests((liveReq) => {
+      setCollaborationRequests((prev) => {
+        const index = prev.findIndex((r) => r.id === liveReq.id);
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = liveReq;
+          return updated;
+        } else {
+          return [liveReq, ...prev];
+        }
+      });
+    });
+
+    // Check & hydrate Supabase Auth session
+    getSupabaseSessionUser().then((sessionUser) => {
+      if (sessionUser) {
+        setCurrentUser(sessionUser);
+        localStorage.setItem('creatorly_auth_user', JSON.stringify(sessionUser));
+      }
+    });
+
+    // Listen to real-time auth changes across tabs or token refresh
+    const unsubscribeAuth = onAuthStateChange((sessionUser) => {
+      if (!sessionUser) {
+        setCurrentUser(null);
+        localStorage.removeItem('creatorly_auth_user');
+      } else {
+        setCurrentUser(sessionUser);
+        localStorage.setItem('creatorly_auth_user', JSON.stringify(sessionUser));
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeAuth();
+    };
+  }, []);
+
   const handleOpenAuthWithDestination = (
     tab: 'signin' | 'signup' = 'signin',
     role: UserRole = 'creator',
@@ -84,6 +151,7 @@ export const App: React.FC = () => {
   const handleLoginSuccess = (user: AuthUser, destination?: 'pipeline' | 'storefront' | 'discover' | 'workspace') => {
     setCurrentUser(user);
     localStorage.setItem('creatorly_auth_user', JSON.stringify(user));
+    saveUserToSupabase(user);
     setAuthModalOpen(false);
     if (user.role === 'creator') {
       setPipelinePerspective('creator');
@@ -108,12 +176,17 @@ export const App: React.FC = () => {
     showToast(`Welcome, ${user.name}! Logged in as ${user.role === 'creator' ? 'Creator' : 'User (Brand)'}.`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOutFromSupabase();
+    } catch (err) {
+      console.warn('[Creatorly] Sign out warning:', err);
+    }
     setCurrentUser(null);
     localStorage.removeItem('creatorly_auth_user');
     setActiveView('creator-profile');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast('You have been logged out.');
+    showToast('Signed out successfully.');
   };
 
   const handleOpenAuth = (tab: 'signin' | 'signup' = 'signin', role: UserRole = 'creator') => {
@@ -196,6 +269,7 @@ export const App: React.FC = () => {
 
     setCollaborationRequests((prev) => [newRequest, ...prev]);
     setTargetPipelineRequestId(booking.referenceId);
+    saveCollaborationRequestToSupabase(newRequest);
     showToast(`Campaign ${booking.referenceId} submitted to ${creator.fullName}! Trackable in Workflow Pipeline.`);
   };
 
@@ -219,13 +293,15 @@ export const App: React.FC = () => {
     setCollaborationRequests((prev) =>
       prev.map((req) => {
         if (req.id === requestId) {
-          return {
+          const updated: CollaborationRequest = {
             ...req,
             status: newStatus,
             creatorNotes: notes || req.creatorNotes,
             counterOfferINR: counterOffer !== undefined ? counterOffer : req.counterOfferINR,
             counterOfferNotes: counterOffer !== undefined ? notes : req.counterOfferNotes
           };
+          saveCollaborationRequestToSupabase(updated);
+          return updated;
         }
         return req;
       })
@@ -237,6 +313,7 @@ export const App: React.FC = () => {
     setCollaborationRequests((prev) =>
       prev.map((r) => (r.id === updatedReq.id ? updatedReq : r))
     );
+    saveCollaborationRequestToSupabase(updatedReq);
     if (toastNotice) showToast(toastNotice);
   };
 
@@ -304,12 +381,14 @@ export const App: React.FC = () => {
             const updatedReviews = [newReview, ...(c.reviews || [])];
             const avgRating = updatedReviews.reduce((sum, r) => sum + r.rating, 0) / updatedReviews.length;
 
-            return {
+            const updatedCreator = {
               ...c,
               reviews: updatedReviews,
               totalReviews: updatedReviews.length,
               overallRating: Math.round(avgRating * 10) / 10
             };
+            saveCreatorToSupabase(updatedCreator);
+            return updatedCreator;
           }
           return c;
         })
@@ -321,8 +400,67 @@ export const App: React.FC = () => {
   const handleCreatorCreated = (newCreator: CreatorProfile) => {
     setCreators((prev) => [newCreator, ...prev]);
     setSelectedCreator(newCreator);
+    saveCreatorToSupabase(newCreator);
     setActiveView('creator-profile');
     showToast(`Congratulations ${newCreator.fullName}! Your creator storefront is live.`);
+  };
+
+  // Update creator profile across whole app (storefront, directory, etc.)
+  const handleUpdateCreator = (updated: CreatorProfile) => {
+    setCreators((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    if (selectedCreator.id === updated.id) {
+      setSelectedCreator(updated);
+    }
+    saveCreatorToSupabase(updated);
+    showToast('Creator profile updated across storefront and directory!');
+  };
+
+  // Direct brand message submission -> converts to a CollaborationRequest in pipeline
+  const handleMessageSubmitted = (data: {
+    topic: string;
+    brandName: string;
+    contactEmail: string;
+    message: string;
+    referenceId: string;
+    creator: CreatorProfile;
+  }) => {
+    const newRequest: CollaborationRequest = {
+      id: data.referenceId,
+      creatorId: data.creator.id,
+      creatorName: data.creator.fullName,
+      creatorAvatar: data.creator.avatarUrl,
+      creatorHandle: data.creator.handle,
+      brandName: data.brandName,
+      brandContactPerson: data.brandName,
+      brandEmail: data.contactEmail,
+      companyWebsite: '',
+      serviceTitle: `Inquiry: ${data.topic}`,
+      packageId: 'custom-inquiry',
+      budgetINR: 0,
+      proposedDeadline: 'Flexible',
+      campaignObjective: data.topic,
+      campaignBrief: data.message,
+      deliverables: [data.topic],
+      status: 'in_discussion',
+      submittedAt: 'Just now',
+      pipelineStage: 'proposal',
+      escrowStatus: 'unfunded',
+      escrowAmountINR: 0,
+      timelineEvents: [
+        {
+          id: `ev-${Date.now()}`,
+          timestamp: 'Just now',
+          actor: 'brand',
+          action: 'Direct Inquiry Sent',
+          details: `${data.brandName} sent an inquiry regarding "${data.topic}".`
+        }
+      ]
+    };
+
+    setCollaborationRequests((prev) => [newRequest, ...prev]);
+    setTargetPipelineRequestId(data.referenceId);
+    saveCollaborationRequestToSupabase(newRequest);
+    showToast(`Inquiry sent to ${data.creator.fullName}! Deal card opened in Workflow Pipeline.`);
   };
 
   const handleGlobalRequestBooking = () => {
@@ -391,6 +529,18 @@ export const App: React.FC = () => {
             isCreatorInCompare={isCreatorInCompare}
             onShowToast={showToast}
             onOpenOnboarding={() => setOnboardingModalOpen(true)}
+            onNavigateToSmartMatch={() => {
+              setActiveView('smartmatch');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateToKineticHero={() => {
+              setActiveView('kinetic-hero');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateToPipeline={() => {
+              setActiveView('inbox');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         </div>
       )}
@@ -431,6 +581,9 @@ export const App: React.FC = () => {
               setActiveView('creator-profile');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+            collaborationRequests={collaborationRequests}
+            onBookingSubmitted={handleBookingSubmitted}
+            onUpdateRequestStatus={handleUpdateRequestStatus}
           />
         )
       )}
@@ -461,6 +614,7 @@ export const App: React.FC = () => {
               }
             }}
             onBookingSubmitted={handleBookingSubmitted}
+            onMessageSubmitted={handleMessageSubmitted}
             onOpenPipeline={(perspective) => {
               if (perspective) setPipelinePerspective(perspective);
               setActiveView('inbox');
@@ -502,6 +656,8 @@ export const App: React.FC = () => {
               handleSelectCreator(creator);
               handleInitiateBooking(creator, creator.packages[0]);
             }}
+            onBookingSubmitted={handleBookingSubmitted}
+            onCreatorCreated={handleCreatorCreated}
           />
         </div>
       )}
@@ -610,7 +766,11 @@ moves culture."
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               onSelectCreator={handleSelectCreator}
-              onUpdateRequests={(updated) => setCollaborationRequests(updated)}
+              onUpdateRequests={(updated) => {
+                setCollaborationRequests(updated);
+                updated.forEach((r) => saveCollaborationRequestToSupabase(r));
+              }}
+              onUpdateCreator={handleUpdateCreator}
               onShowToast={showToast}
               currentUser={currentUser}
               onLogout={handleLogout}
@@ -675,6 +835,7 @@ moves culture."
         onLoginSuccess={handleLoginSuccess}
         initialTab={authModalInitialTab}
         initialRole={authModalInitialRole}
+        targetDestination={authTargetDestination}
         onShowToast={showToast}
       />
 
@@ -701,6 +862,7 @@ moves culture."
           currentCurrency={currentCurrency}
           onCurrencyChange={(code) => setCurrentCurrency(code)}
           onShowToast={showToast}
+          onNavigateToPage={handleNavigateToPage}
         />
       )}
 
@@ -721,7 +883,8 @@ moves culture."
           overflow-x: hidden;
         }
 
-        .creatorly-app:has(.bd-app-container) {
+        .creatorly-app:has(.bd-app-container),
+        .creatorly-app:has(.creator-workspace-container) {
           height: 100vh;
           max-height: 100vh;
           overflow: hidden;
@@ -732,6 +895,12 @@ moves culture."
           width: 100%;
           max-width: 100%;
           overflow-x: hidden;
+        }
+
+        .view-wrapper.workspace-view {
+          height: 100vh;
+          max-height: 100vh;
+          overflow: hidden;
         }
 
         .kinetic-hero-view {
