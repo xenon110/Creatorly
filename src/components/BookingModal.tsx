@@ -3,7 +3,8 @@ import type {
   CreatorProfile, 
   ServicePackage, 
   CurrencyCode, 
-  BookingSubmissionData 
+  BookingSubmissionData,
+  AuthUser
 } from '../types/creator';
 import { formatCurrency } from '../data/currencies';
 import { 
@@ -26,6 +27,7 @@ interface BookingModalProps {
   onShowToast: (msg: string) => void;
   onBookingSubmitted?: (booking: BookingSubmissionData, creator: CreatorProfile) => void;
   onViewInPipeline?: (referenceId: string) => void;
+  currentUser?: AuthUser | null;
 }
 
 export const BookingModal: React.FC<BookingModalProps> = ({
@@ -37,6 +39,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   onShowToast,
   onBookingSubmitted,
   onViewInPipeline,
+  currentUser,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedPackage, setSelectedPackage] = useState<ServicePackage>(
@@ -44,10 +47,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   );
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>([]);
   
-  // Form fields
-  const [brandName, setBrandName] = useState('');
-  const [contactName, setContactName] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
+  // Form fields (pre-filled with logged-in user details if available)
+  const [brandName, setBrandName] = useState(currentUser?.companyName || currentUser?.name || '');
+  const [contactName, setContactName] = useState(currentUser?.name || '');
+  const [contactEmail, setContactEmail] = useState(currentUser?.email || '');
   const [companyWebsite, setCompanyWebsite] = useState('');
   const [campaignObjective, setCampaignObjective] = useState('Brand Awareness & Consideration');
   const [targetAudience] = useState('Tech Enthusiasts & Developers (India/Global)');
@@ -55,6 +58,21 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [campaignBrief, setCampaignBrief] = useState('');
   const [exclusivityRequested, setExclusivityRequested] = useState(false);
   const [briefAttachmentName, setBriefAttachmentName] = useState('');
+
+  // Sync logged in user profile when currentUser prop changes
+  useEffect(() => {
+    if (currentUser) {
+      if (!brandName && (currentUser.companyName || currentUser.name)) {
+        setBrandName(currentUser.companyName || currentUser.name);
+      }
+      if (!contactName && currentUser.name) {
+        setContactName(currentUser.name);
+      }
+      if (!contactEmail && currentUser.email) {
+        setContactEmail(currentUser.email);
+      }
+    }
+  }, [currentUser]);
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});

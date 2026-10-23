@@ -70,7 +70,9 @@ export const CreatorMetrics: React.FC<CreatorMetricsProps> = ({
             <span className="metric-badge-growth">+14% / 90d</span>
           </div>
           <span className="metric-label">Total Verified Audience</span>
-          <span className="metric-sublabel">52K YouTube • 28K Instagram • 5K LinkedIn</span>
+          <span className="metric-sublabel">
+            {metrics.platformFollowers?.youtube ? `${(metrics.platformFollowers.youtube / 1000).toFixed(0)}K YouTube` : '52K YouTube'} • {metrics.platformFollowers?.instagram ? `${(metrics.platformFollowers.instagram / 1000).toFixed(0)}K Instagram` : '28K Instagram'} • {metrics.platformFollowers?.linkedin ? `${(metrics.platformFollowers.linkedin / 1000).toFixed(0)}K LinkedIn` : '5K LinkedIn'}
+          </span>
         </div>
 
         {/* Average Views Card */}

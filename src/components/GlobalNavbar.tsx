@@ -199,16 +199,25 @@ export const GlobalNavbar: React.FC<GlobalNavbarProps> = ({
                   className="btn-role btn-role-brand"
                   onClick={() => {
                     onNavigate('discover');
-                    onShowToast('Explore and find verified creators.');
+                    onShowToast('Browsing verified creators & transparent rate cards');
                   }}
+                  title="Explore creators, audience metrics & transparent rates"
                 >
-                  Find Creators
+                  Find Creators & Rates
                 </button>
 
                 <button 
                   type="button" 
                   className="btn-role btn-role-creator"
-                  onClick={() => (onOpenAuth ? onOpenAuth('signup', 'creator') : onOpenOnboarding())}
+                  onClick={() => {
+                    if (onOpenAuth) {
+                      onOpenAuth('signup', 'creator');
+                    } else {
+                      onOpenOnboarding();
+                    }
+                    onShowToast('Register your details as a creator');
+                  }}
+                  title="Register your details, connect socials & list rate cards"
                 >
                   Join as Creator
                 </button>
@@ -295,13 +304,18 @@ export const GlobalNavbar: React.FC<GlobalNavbarProps> = ({
                   <>
                     <button 
                       className="btn btn-primary btn-block"
-                      onClick={() => { setMobileMenuOpen(false); onNavigate('discover'); onShowToast('Find creators in the directory.'); }}
+                      onClick={() => { setMobileMenuOpen(false); onNavigate('discover'); onShowToast('Browsing verified creators & transparent rate cards'); }}
                     >
-                      Find Creators
+                      Find Creators & Rates
                     </button>
                     <button 
                       className="btn btn-secondary btn-block"
-                      onClick={() => { setMobileMenuOpen(false); (onOpenAuth ? onOpenAuth('signup', 'creator') : onOpenOnboarding()); }}
+                      onClick={() => { 
+                        setMobileMenuOpen(false); 
+                        if (onOpenAuth) onOpenAuth('signup', 'creator');
+                        else onOpenOnboarding(); 
+                        onShowToast('Register your details as a creator');
+                      }}
                     >
                       Join as Creator
                     </button>

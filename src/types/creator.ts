@@ -263,6 +263,17 @@ export interface BrandReviewData {
   submittedAt: string;
 }
 
+export interface DealChatMessage {
+  id: string;
+  senderRole: 'brand' | 'creator';
+  senderName: string;
+  senderAvatar?: string;
+  message: string;
+  timestamp: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+}
+
 export interface CollaborationRequest {
   id: string;
   creatorId: string;
@@ -294,6 +305,10 @@ export interface CollaborationRequest {
   publishedDeliverable?: PublishedDeliverableData;
   brandReview?: BrandReviewData;
   timelineEvents?: TimelineEvent[];
+  // Digital Agreement & In-Deal Chat
+  agreementSignedByCreator?: string;
+  agreementSignedByBrand?: string;
+  chatMessages?: DealChatMessage[];
 }
 
 export interface SmartMatchParsedQuery {

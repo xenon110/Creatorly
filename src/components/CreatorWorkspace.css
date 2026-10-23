@@ -891,31 +891,36 @@ input.cw-search-box:focus {
 /* ─────────────────────────────────────────────────────────────────────────────
    Section B: Enhanced Live Public Creator Card (Dashing, Smart, Cool First Impression)
    ───────────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Section B: Classic Forest Green Public Creator Card Preview (Refined Heritage Green)
+   ───────────────────────────────────────────────────────────────────────────── */
 .cw-creator-card-preview {
   background: #FFFFFF;
-  border: 1px solid var(--cw-border);
-  border-radius: var(--cw-radius-xl);
+  border: 1.5px solid #244833;
+  border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(22, 40, 29, 0.08);
+  box-shadow: 0 8px 28px rgba(18, 42, 28, 0.12), 0 2px 8px rgba(18, 42, 28, 0.06);
   position: relative;
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .cw-creator-card-preview:hover {
-  box-shadow: 0 8px 32px rgba(22, 40, 29, 0.12);
+  border-color: #173824;
+  box-shadow: 0 12px 36px rgba(18, 42, 28, 0.18), 0 4px 12px rgba(18, 42, 28, 0.08);
 }
 
-/* Ambient Banner Header */
+/* Ambient Classic Forest Banner Header */
 .cw-card-banner {
-  height: 96px;
-  background: linear-gradient(135deg, #0D1A12 0%, #16281D 50%, #203A2B 100%);
+  height: 98px;
+  background: linear-gradient(135deg, #09170E 0%, #12281B 45%, #1B3927 100%);
   position: relative;
   padding: 12px 16px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  border-bottom: 1px solid rgba(74, 222, 128, 0.22);
 }
 
 .cw-card-banner::after {
@@ -1137,18 +1142,142 @@ input.cw-search-box:focus {
   line-height: 1.5;
   margin: 0 0 14px 0;
   font-style: italic;
-  border-left: 2.5px solid var(--cw-brass-gold);
-  background: #FAF9F5;
-  padding: 8px 12px;
+  border-left: 3px solid #166534;
+  background: #F4F8F5;
+  color: #244432;
+  padding: 9px 13px;
   border-radius: 0 8px 8px 0;
 }
 
-/* Niche Pills */
-.cw-creator-card-niches {
+/* Niche Pills - Classic Heritage Green Style */
+.cw-creator-card-niches,
+.cw-card-tags-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.cw-creator-niche-pill,
+.cw-card-niche-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #EFF6F1;
+  color: #17472C;
+  border: 1px solid #CEE3D5;
+  transition: all 0.15s ease;
+}
+
+.cw-creator-niche-pill:hover,
+.cw-card-niche-pill:hover {
+  background: #E3F0E8;
+  border-color: #B9D6C3;
+  color: #0E3520;
+}
+
+.cw-creator-niche-pill.active-niche {
+  background: #16281D;
+  color: #FFFFFF;
+  border-color: #0F1E15;
+  font-weight: 700;
+}
+
+/* 3-Cell Verified Metrics Grid - Classic Green Luxury Bento */
+.cw-creator-metrics-3grid,
+.cw-card-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.cw-creator-metric-cell,
+.cw-card-metric-cell {
+  background: #F4F8F5;
+  border: 1px solid #D6E8DE;
+  border-radius: 9px;
+  padding: 10px 4px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: all 0.15s ease;
+}
+
+.cw-creator-metric-cell:hover,
+.cw-card-metric-cell:hover {
+  background: #EBF4EF;
+  border-color: #BEDBC8;
+  box-shadow: 0 2px 6px rgba(22, 40, 29, 0.06);
+}
+
+.cw-metric-val-row,
+.cw-metric-cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: #11281B;
+  line-height: 1.2;
+}
+
+.cw-metric-cell-val {
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: #11281B;
+  line-height: 1.2;
+}
+
+.cw-metric-lbl,
+.cw-metric-cell-lbl {
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #41614F;
+  margin-top: 2px;
+}
+
+.cw-metric-sub,
+.cw-metric-cell-sub {
+  font-size: 0.63rem;
+  font-weight: 700;
+  color: #15803D;
+  margin-top: 1px;
+}
+
+/* Classic Heritage Green CTA Button */
+.cw-storefront-cta-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 9px;
+  background: #16281D;
+  color: #FFFFFF;
+  font-size: 0.84rem;
+  font-weight: 700;
+  border: 1px solid #0E1D14;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(22, 40, 29, 0.2);
+}
+
+.cw-storefront-cta-btn:hover {
+  background: #1F3D2B;
+  border-color: #16281D;
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px rgba(22, 40, 29, 0.28);
 }
 
 .cw-niche-tag {

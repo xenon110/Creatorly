@@ -7,7 +7,12 @@ import type {
 } from '../types/creator';
 import { formatCurrency } from '../data/currencies';
 import { CreatorlyLogo } from './CreatorlyLogo';
-import { fetchCampaignsFromSupabase, saveCampaignToSupabase } from '../lib/supabaseClient';
+import { 
+  fetchCampaignsFromSupabase, 
+  saveCampaignToSupabase, 
+  uploadMediaFile,
+  saveUserToSupabase
+} from '../lib/supabaseClient';
 import './BrandDashboard.css';
 import {
   Compass,
@@ -73,6 +78,7 @@ interface BrandDashboardProps {
   collaborationRequests?: CollaborationRequest[];
   onBookingSubmitted?: (booking: any, creator: CreatorProfile) => void;
   onUpdateRequestStatus?: (requestId: string, newStatus: any, notes?: string, counterOffer?: number) => void;
+  onUpdateCollaborationRequest?: (req: CollaborationRequest, toastNotice?: string) => void;
 }
 
 // 12 Category Tiles definition matching reference screenshot
@@ -98,6 +104,8 @@ export interface ChatMessage {
   timestamp: string;
   cardType?: 'brief' | 'offer' | 'draft';
   cardData?: any;
+  attachmentUrl?: string;
+  attachmentName?: string;
 }
 
 export interface BrandConversation {
@@ -127,6 +135,10 @@ export interface OutgoingCollabRequest {
   status: 'Pending' | 'In Discussion' | 'Accepted' | 'In Production' | 'Completed' | 'Declined';
   submittedAt: string;
   escrowFunded?: boolean;
+  agreementSignedByCreator?: string;
+  agreementSignedByBrand?: string;
+  videoDraftUrl?: string;
+  scriptOutlineText?: string;
 }
 
 export interface BrandCampaign {
@@ -176,7 +188,8 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
   onReturnToHome,
   collaborationRequests,
   onBookingSubmitted,
-  onUpdateRequestStatus: _onUpdateRequestStatus
+  onUpdateRequestStatus,
+  onUpdateCollaborationRequest
 }) => {
   // Navigation & Active View State
   const [activeTab, setActiveTab] = useState<BrandDashboardTab>('discover');
@@ -251,86 +264,52 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
   const [requestSearchQuery, setRequestSearchQuery] = useState('');
   const [requestToFund, setRequestToFund] = useState<OutgoingCollabRequest | null>(null);
 
-  const [outgoingRequests, setOutgoingRequests] = useState<OutgoingCollabRequest[]>([
-    {
-      id: 'REQ-2026-1042',
-      creatorId: 'creator-tech-arjun',
-      creatorName: 'Arjun Mehta',
-      creatorHandle: '@techwitharjun',
-      avatarUrl: '/images/alex-sharma.jpg',
-      campaignName: 'AI Coding Assistant Q4 Promo',
-      budgetINR: 18000,
-      deadline: '2026-11-05',
-      deliverables: ['1 Dedicated YouTube Review (8-10m)', 'Pinned sponsor link with promo discount'],
-      briefText: 'Highlight AI autocomplete latency, accuracy on React & TypeScript, and team collaboration features.',
-      status: 'Accepted',
-      submittedAt: 'Today, 2:15 PM',
-      escrowFunded: false
-    },
-    {
-      id: 'REQ-2026-1038',
-      creatorId: 'creator-food-rhea',
-      creatorName: 'Rhea Kapoor',
-      creatorHandle: '@rheaeats',
-      avatarUrl: '/images/ananya-roy.jpg',
-      campaignName: 'Artisanal Cafe Review Series',
-      budgetINR: 12000,
-      deadline: '2026-10-31',
-      deliverables: ['1 High-energy Reel (60s)', '2 Instagram Stories with swipe-up/sticker link'],
-      briefText: 'Capture authentic cafe atmosphere, signature dishes, and easy contactless ordering workflow.',
-      status: 'In Discussion',
-      submittedAt: 'Yesterday'
-    },
-    {
-      id: 'REQ-2026-1025',
-      creatorId: 'creator-fitness-neha',
-      creatorName: 'Neha Verma',
-      creatorHandle: '@fitwithneha',
-      avatarUrl: '/images/neha-singhal.jpg',
-      campaignName: 'Electrolyte Hydration Drink Launch',
-      budgetINR: 10000,
-      deadline: '2026-11-12',
-      deliverables: ['1 Workout Integration Reel', 'Post-workout recovery endorsement'],
-      briefText: 'Focus on zero sugar, natural electrolytes, and rapid muscle recovery during intense HIIT sessions.',
-      status: 'In Production',
-      submittedAt: '3 days ago',
-      escrowFunded: true
-    },
-    {
-      id: 'REQ-2026-1019',
-      creatorId: 'creator-travel-sanya',
-      creatorName: 'Sanya Iyer',
-      creatorHandle: '@sanyatravels',
-      avatarUrl: '/images/riya-kapoor.jpg',
-      campaignName: 'Eco-Resort Staycation Feature',
-      budgetINR: 22000,
-      deadline: '2026-11-20',
-      deliverables: ['1 Cinematic 4K Reel', '3 Story highlights', 'RAW Photo Pack'],
-      briefText: 'Showcase solar-powered luxury villas, organic farm-to-table dining, and mountain wellness spa.',
-      status: 'Pending',
-      submittedAt: '4 days ago'
-    },
-    {
-      id: 'REQ-2026-1011',
-      creatorId: 'creator-gaming-karan',
-      creatorName: 'Karan Singh',
-      creatorHandle: '@karanplays',
-      avatarUrl: '/images/jun-park.jpg',
-      campaignName: 'Wireless Gaming Mouse Showcase',
-      budgetINR: 15000,
-      deadline: '2026-11-08',
-      deliverables: ['Dedicated 2-hour stream banner overlay', '2 verbal shoutouts with QR code', 'Social cut clip'],
-      briefText: 'Demonstrate ultra-low 1ms latency during competitive tournament gameplay.',
-      status: 'Pending',
-      submittedAt: '5 days ago'
+  const [outgoingRequests, setOutgoingRequests] = useState<OutgoingCollabRequest[]>(() => {
+    if (collaborationRequests && collaborationRequests.length > 0) {
+      return collaborationRequests.map(r => ({
+        id: r.id,
+        creatorId: r.creatorId,
+        creatorName: r.creatorName,
+        creatorHandle: r.creatorHandle,
+        avatarUrl: r.creatorAvatar,
+        campaignName: r.serviceTitle,
+        budgetINR: r.budgetINR,
+        deadline: r.proposedDeadline,
+        deliverables: r.deliverables,
+        briefText: r.campaignBrief,
+        status: (r.status === 'in_progress' ? 'Accepted' : (r.status === 'completed' ? 'Completed' : (r.status === 'declined' ? 'Declined' : 'Pending'))) as any,
+        submittedAt: r.submittedAt || 'Just now',
+        escrowFunded: r.escrowStatus === 'held' || r.escrowStatus === 'released',
+        agreementSignedByCreator: r.agreementSignedByCreator,
+        agreementSignedByBrand: r.agreementSignedByBrand,
+        videoDraftUrl: r.videoDraft?.draftUrl,
+        scriptOutlineText: r.scriptOutline ? (r.scriptOutline.hook || r.scriptOutline.title) : undefined
+      }));
     }
-  ]);
+    return [];
+  });
 
   // Synchronize incoming collaboration requests from core pipeline
   useEffect(() => {
     if (collaborationRequests && collaborationRequests.length > 0) {
       setOutgoingRequests(prev => {
         const existingIds = new Set(prev.map(p => p.id));
+        const updatedPrev = prev.map(p => {
+          const matched = collaborationRequests.find(r => r.id === p.id);
+          if (matched) {
+            return {
+              ...p,
+              agreementSignedByCreator: matched.agreementSignedByCreator || p.agreementSignedByCreator,
+              agreementSignedByBrand: matched.agreementSignedByBrand || p.agreementSignedByBrand,
+              videoDraftUrl: matched.videoDraft?.draftUrl || p.videoDraftUrl,
+              scriptOutlineText: (matched.scriptOutline ? (matched.scriptOutline.hook || matched.scriptOutline.title) : undefined) || p.scriptOutlineText,
+              status: (matched.status === 'in_progress' ? 'Accepted' : (matched.status === 'completed' ? 'Completed' : (matched.status === 'declined' ? 'Declined' : p.status))) as any,
+              escrowFunded: matched.escrowStatus === 'held' || matched.escrowStatus === 'released' || p.escrowFunded
+            };
+          }
+          return p;
+        });
+
         const newFromPipeline: OutgoingCollabRequest[] = collaborationRequests
           .filter(r => !existingIds.has(r.id))
           .map(r => ({
@@ -346,108 +325,21 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
             briefText: r.campaignBrief,
             status: (r.status === 'in_progress' ? 'Accepted' : (r.status === 'completed' ? 'Completed' : (r.status === 'declined' ? 'Declined' : 'Pending'))) as any,
             submittedAt: r.submittedAt || 'Just now',
-            escrowFunded: r.escrowStatus === 'held' || r.escrowStatus === 'released'
+            escrowFunded: r.escrowStatus === 'held' || r.escrowStatus === 'released',
+            agreementSignedByCreator: r.agreementSignedByCreator,
+            agreementSignedByBrand: r.agreementSignedByBrand,
+            videoDraftUrl: r.videoDraft?.draftUrl,
+            scriptOutlineText: r.scriptOutline ? (r.scriptOutline.hook || r.scriptOutline.title) : undefined
           }));
-        if (newFromPipeline.length === 0) return prev;
-        return [...newFromPipeline, ...prev];
+        if (newFromPipeline.length === 0) return updatedPrev;
+        return [...newFromPipeline, ...updatedPrev];
       });
     }
   }, [collaborationRequests]);
 
   // Brand Direct Messages & Messenger State
-  const [brandConversations, setBrandConversations] = useState<BrandConversation[]>([
-    {
-      id: 'b-conv-1',
-      creatorId: 'creator-tech-arjun',
-      creatorName: 'Arjun Mehta',
-      handle: '@techwitharjun',
-      avatar: '/images/alex-sharma.jpg',
-      niche: 'Technology',
-      startingPrice: 6000,
-      unread: true,
-      status: 'Active Negotiation',
-      messages: [
-        {
-          id: 'm1',
-          sender: 'brand',
-          text: 'Hi Arjun! We love your in-depth developer tutorials. We are launching our AI Coding Assistant and would love to collaborate on a dedicated feature video.',
-          timestamp: '10:30 AM'
-        },
-        {
-          id: 'm2',
-          sender: 'creator',
-          text: 'Hey Sarah! Thanks for reaching out. The AI assistant looks super slick. I tested the beta and the code completion latency is genuinely impressive.',
-          timestamp: '11:15 AM'
-        },
-        {
-          id: 'm3',
-          sender: 'brand',
-          text: 'Awesome! We submitted an official collaboration proposal for ₹18,000 for a dedicated 8-10 min review. Does that timeline work for you?',
-          timestamp: '11:45 AM',
-          cardType: 'brief',
-          cardData: { title: 'AI Coding Assistant Q4 Promo', budget: 18000, deadline: 'Nov 5, 2026' }
-        },
-        {
-          id: 'm4',
-          sender: 'creator',
-          text: 'Hey Sarah! Loved the brief for the AI assistant. I can deliver the first draft by Tuesday. Ready to sign the agreement whenever you are!',
-          timestamp: '25m ago'
-        }
-      ]
-    },
-    {
-      id: 'b-conv-2',
-      creatorId: 'creator-food-rhea',
-      creatorName: 'Rhea Kapoor',
-      handle: '@rheaeats',
-      avatar: '/images/ananya-roy.jpg',
-      niche: 'Food & Dining',
-      startingPrice: 6000,
-      unread: true,
-      status: 'Proposal Sent',
-      messages: [
-        {
-          id: 'm2-1',
-          sender: 'brand',
-          text: 'Hi Rhea! We are organizing the Artisanal Cafe Series in Delhi and would love to feature your culinary review.',
-          timestamp: 'Yesterday'
-        },
-        {
-          id: 'm2-2',
-          sender: 'creator',
-          text: 'Could we schedule the cafe shoot for this Thursday morning for the best natural light?',
-          timestamp: '2h ago'
-        }
-      ]
-    },
-    {
-      id: 'b-conv-3',
-      creatorId: 'creator-fitness-neha',
-      creatorName: 'Neha Verma',
-      handle: '@fitwithneha',
-      avatar: '/images/neha-singhal.jpg',
-      niche: 'Fitness',
-      startingPrice: 5000,
-      unread: true,
-      status: 'In Production',
-      messages: [
-        {
-          id: 'm3-1',
-          sender: 'brand',
-          text: 'Hi Neha! Product package dispatched via BlueDart with sample flavors.',
-          timestamp: '2 days ago'
-        },
-        {
-          id: 'm3-2',
-          sender: 'creator',
-          text: 'Received the sample product box! Taste test review is going to be fire.',
-          timestamp: 'Yesterday'
-        }
-      ]
-    }
-  ]);
-
-  const [activeConversationId, setActiveConversationId] = useState<string>('b-conv-1');
+  const [brandConversations, setBrandConversations] = useState<BrandConversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string>('');
   const [chatInputText, setChatInputText] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [chatFilter, setChatFilter] = useState<'All' | 'Unread' | 'Active'>('All');
@@ -502,6 +394,7 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
   const [newCampaignBudget, setNewCampaignBudget] = useState(40000);
   const [newCampaignStartDate, setNewCampaignStartDate] = useState('2026-11-01');
   const [newCampaignEndDate, setNewCampaignEndDate] = useState('2026-11-30');
+  const [newCampaignCreatorIds, setNewCampaignCreatorIds] = useState<string[]>(['creator-food-rhea', 'creator-tech-arjun']);
   const [selectedCampaignForView, setSelectedCampaignForView] = useState<BrandCampaign | null>(null);
 
   // Saved Searches State
@@ -536,24 +429,51 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
 
   // Brand Settings State
   const [settingsSubTab, setSettingsSubTab] = useState<'profile' | 'billing' | 'team' | 'notifications'>('profile');
-  const [brandProfile, setBrandProfile] = useState({
-    companyName: 'Razorpay Growth Team',
-    website: 'https://razorpay.com',
-    industry: 'Financial Technology',
-    companySize: '1,000+ Employees',
-    location: 'Bengaluru, India',
-    bio: 'Powering seamless financial transactions, creator payroll, and digital business solutions across India.',
-    contactEmail: 'sarah.mitchell@razorpay.com',
-    billingCurrency: 'INR' as CurrencyCode
-  });
+  const [brandProfile, setBrandProfile] = useState(() => ({
+    companyName: _currentUser?.companyName || _currentUser?.name || 'Brand Partner',
+    website: 'https://creatorly.media',
+    industry: _currentUser?.niche || 'Digital Commerce & Brand',
+    companySize: 'Growth Venture',
+    location: 'India',
+    bio: 'Partnering with vetted creators for authentic sponsored campaigns with milestone escrow payouts.',
+    contactEmail: _currentUser?.email || 'partner@brand.com',
+    billingCurrency: 'INR' as CurrencyCode,
+    logoUrl: _currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=200'
+  }));
+
+  useEffect(() => {
+    if (_currentUser) {
+      setBrandProfile((prev) => ({
+        ...prev,
+        companyName: _currentUser.companyName || _currentUser.name || prev.companyName,
+        contactEmail: _currentUser.email || prev.contactEmail,
+        industry: _currentUser.niche || prev.industry,
+        logoUrl: _currentUser.avatarUrl || prev.logoUrl
+      }));
+      setTeamMembers([
+        {
+          id: 'tm-1',
+          name: _currentUser.name || _currentUser.companyName || 'Brand Admin',
+          email: _currentUser.email,
+          role: 'Brand Admin (Owner)',
+          status: 'Active'
+        }
+      ]);
+    }
+  }, [_currentUser]);
+
   const [escrowWalletBalanceINR, setEscrowWalletBalanceINR] = useState(150000);
   const [addFundsModalOpen, setAddFundsModalOpen] = useState(false);
   const [fundAmountINR, setFundAmountINR] = useState(50000);
 
-  const [teamMembers, setTeamMembers] = useState([
-    { id: 'tm-1', name: 'Sarah Mitchell', email: 'sarah.mitchell@razorpay.com', role: 'Brand Admin (Owner)', status: 'Active' },
-    { id: 'tm-2', name: 'Kabir Chawla', email: 'kabir.c@razorpay.com', role: 'Campaign Manager', status: 'Active' },
-    { id: 'tm-3', name: 'Ananya Deshmukh', email: 'ananya.d@razorpay.com', role: 'Financial Reviewer', status: 'Active' }
+  const [teamMembers, setTeamMembers] = useState(() => [
+    { 
+      id: 'tm-1', 
+      name: _currentUser?.name || _currentUser?.companyName || 'Brand Admin', 
+      email: _currentUser?.email || 'partner@brand.com', 
+      role: 'Brand Admin (Owner)', 
+      status: 'Active' 
+    }
   ]);
   const [inviteTeamModalOpen, setInviteTeamModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -579,7 +499,7 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
         if (parsed.outgoingRequests) setOutgoingRequests(parsed.outgoingRequests);
         if (parsed.campaigns) setCampaigns(parsed.campaigns);
         if (parsed.savedSearches) setSavedSearches(parsed.savedSearches);
-        if (parsed.brandProfile) setBrandProfile(parsed.brandProfile);
+        if (parsed.brandProfile && !_currentUser) setBrandProfile(parsed.brandProfile);
         if (parsed.escrowWalletBalanceINR) setEscrowWalletBalanceINR(parsed.escrowWalletBalanceINR);
       }
     } catch {
@@ -1212,6 +1132,33 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
     }, 1400);
   };
 
+  // Chat message send handler with file attachment
+  const handleSendAttachedMessage = (fileName: string, fileUrl: string) => {
+    const activeConv = brandConversations.find(c => c.id === activeConversationId);
+    if (!activeConv) return;
+
+    const newMsg: ChatMessage = {
+      id: `m-${Date.now()}`,
+      sender: 'brand',
+      text: `Attached: ${fileName}`,
+      attachmentUrl: fileUrl,
+      attachmentName: fileName,
+      timestamp: 'Just now'
+    };
+
+    setBrandConversations(prev => prev.map(conv => {
+      if (conv.id === activeConversationId) {
+        return {
+          ...conv,
+          messages: [...conv.messages, newMsg],
+          unread: false
+        };
+      }
+      return conv;
+    }));
+    onShowToast(`Attached and shared "${fileName}"!`);
+  };
+
   // Quick reply chip click
   const handleQuickChipClick = (chipText: string) => {
     setChatInputText(chipText);
@@ -1241,6 +1188,28 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
     onShowToast(`₹${req.budgetINR.toLocaleString('en-IN')} secured in Creatorly Escrow! ${req.creatorName} notified to begin production.`);
     if (selectedRequestForDrawer?.id === req.id) {
       setSelectedRequestForDrawer(prev => prev ? { ...prev, status: 'In Production', escrowFunded: true } : null);
+    }
+
+    const matchingReq = collaborationRequests?.find(r => r.id === req.id);
+    if (matchingReq && onUpdateCollaborationRequest) {
+      const updatedReq: CollaborationRequest = {
+        ...matchingReq,
+        status: 'in_progress',
+        pipelineStage: 'script_signoff',
+        escrowStatus: 'held',
+        escrowAmountINR: req.budgetINR,
+        timelineEvents: [
+          {
+            id: `ev-${Date.now()}`,
+            timestamp: 'Just now',
+            actor: 'brand',
+            action: 'Escrow Deposited & Secured',
+            details: `₹${req.budgetINR.toLocaleString('en-IN')} deposited to Creatorly Escrow. Creator authorized to begin production.`
+          },
+          ...(matchingReq.timelineEvents || [])
+        ]
+      };
+      onUpdateCollaborationRequest(updatedReq);
     }
   };
 
@@ -1643,12 +1612,12 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                 onClick={() => setUserDropdownOpen(!userDropdownOpen)}
               >
                 <img 
-                  src="/images/talent-maya.jpg" 
-                  alt="Sarah Mitchell" 
+                  src={brandProfile.logoUrl || _currentUser?.avatarUrl || "/images/talent-maya.jpg"} 
+                  alt={_currentUser?.name || brandProfile.companyName} 
                   className="bd-user-avatar" 
                 />
                 <div className="bd-user-meta">
-                  <span className="bd-user-name">{brandProfile.companyName.split(' ')[0]}</span>
+                  <span className="bd-user-name">{(brandProfile.companyName || _currentUser?.name || 'Brand').split(' ')[0]}</span>
                   <span className="bd-user-role">Brand Admin</span>
                 </div>
                 <ChevronDown size={14} color="#828E86" />
@@ -1656,6 +1625,17 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
 
               {userDropdownOpen && (
                 <div className="bd-dropdown-menu">
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #E2E8F0', marginBottom: 6 }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#16281D' }}>
+                      {brandProfile.companyName || _currentUser?.companyName || _currentUser?.name || 'Brand Partner'}
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: '#64748B', marginTop: 2 }}>
+                      {_currentUser?.email || brandProfile.contactEmail}
+                    </div>
+                    <span style={{ display: 'inline-block', marginTop: 5, fontSize: '0.68rem', background: '#EDF5F0', color: '#15803D', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>
+                      {_currentUser ? '✓ Verified Brand Partner' : 'Guest Mode'}
+                    </span>
+                  </div>
                   <button 
                     type="button" 
                     className="bd-dropdown-item"
@@ -2929,47 +2909,63 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                   </div>
 
                   <div className="bd-chat-threads-list">
-                    {brandConversations
-                      .filter(c => {
-                        if (chatFilter === 'Unread' && !c.unread) return false;
-                        if (chatSearchQuery.trim()) {
-                          return c.creatorName.toLowerCase().includes(chatSearchQuery.toLowerCase()) || c.handle.toLowerCase().includes(chatSearchQuery.toLowerCase());
-                        }
-                        return true;
-                      })
-                      .map(conv => {
-                        const lastMsg = conv.messages[conv.messages.length - 1];
-                        const isActive = conv.id === activeConversationId;
+                    {brandConversations.length === 0 ? (
+                      <div style={{ padding: '36px 16px', textAlign: 'center', color: '#828E86', fontSize: '0.84rem' }}>
+                        <MessageSquare size={26} color="#CBD5E1" style={{ margin: '0 auto 8px', display: 'block' }} />
+                        <p style={{ margin: 0, fontWeight: 600 }}>No conversations yet</p>
+                        <p style={{ margin: '4px 0 12px', fontSize: '0.76rem', color: '#94A3B8' }}>Select any creator to start a conversation</p>
+                        <button 
+                          type="button" 
+                          className="bd-save-search-action-btn"
+                          style={{ margin: '0 auto', fontSize: '0.78rem' }}
+                          onClick={() => setNewChatModalOpen(true)}
+                        >
+                          <Plus size={12} />
+                          <span>Start New Chat</span>
+                        </button>
+                      </div>
+                    ) : (
+                      brandConversations
+                        .filter(c => {
+                          if (chatFilter === 'Unread' && !c.unread) return false;
+                          if (chatSearchQuery.trim()) {
+                            return c.creatorName.toLowerCase().includes(chatSearchQuery.toLowerCase()) || c.handle.toLowerCase().includes(chatSearchQuery.toLowerCase());
+                          }
+                          return true;
+                        })
+                        .map(conv => {
+                          const lastMsg = conv.messages[conv.messages.length - 1];
+                          const isActive = conv.id === activeConversationId;
 
-                        return (
-                          <div 
-                            key={conv.id} 
-                            className={`bd-chat-thread-item ${isActive ? 'active' : ''}`}
-                            onClick={() => {
-                              setActiveConversationId(conv.id);
-                              // Mark as read
-                              setBrandConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unread: false } : c));
-                            }}
-                          >
-                            <div className="bd-chat-thread-avatar-wrap">
-                              <img src={conv.avatar} alt={conv.creatorName} className="bd-chat-thread-avatar" />
-                              <div className="bd-chat-online-dot" />
-                            </div>
-                            <div className="bd-chat-thread-meta">
-                              <div className="bd-chat-thread-top">
-                                <span className="bd-chat-thread-name">{conv.creatorName}</span>
-                                <span className="bd-chat-thread-time">{lastMsg?.timestamp || 'Now'}</span>
+                          return (
+                            <div 
+                              key={conv.id} 
+                              className={`bd-chat-thread-item ${isActive ? 'active' : ''}`}
+                              onClick={() => {
+                                setActiveConversationId(conv.id);
+                                setBrandConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unread: false } : c));
+                              }}
+                            >
+                              <div className="bd-chat-thread-avatar-wrap">
+                                <img src={conv.avatar} alt={conv.creatorName} className="bd-chat-thread-avatar" />
+                                <div className="bd-chat-online-dot" />
                               </div>
-                              <div className="bd-chat-thread-snippet">
-                                {lastMsg ? (lastMsg.sender === 'brand' ? `You: ${lastMsg.text}` : lastMsg.text) : 'Conversation started'}
+                              <div className="bd-chat-thread-meta">
+                                <div className="bd-chat-thread-top">
+                                  <span className="bd-chat-thread-name">{conv.creatorName}</span>
+                                  <span className="bd-chat-thread-time">{lastMsg?.timestamp || 'Now'}</span>
+                                </div>
+                                <div className="bd-chat-thread-snippet">
+                                  {lastMsg ? (lastMsg.sender === 'brand' ? `You: ${lastMsg.text}` : lastMsg.text) : 'Conversation started'}
+                                </div>
                               </div>
+                              {conv.unread && (
+                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626', flexShrink: 0 }} />
+                              )}
                             </div>
-                            {conv.unread && (
-                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626', flexShrink: 0 }} />
-                            )}
-                          </div>
-                        );
-                      })}
+                          );
+                        })
+                    )}
                   </div>
                 </div>
 
@@ -2978,8 +2974,23 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                   const activeConv = brandConversations.find(c => c.id === activeConversationId);
                   if (!activeConv) {
                     return (
-                      <div className="bd-chat-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <p style={{ color: '#828E86' }}>Select a conversation to start messaging</p>
+                      <div className="bd-chat-main" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, textAlign: 'center', background: '#FAFAFA' }}>
+                        <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#EDF5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                          <MessageSquare size={26} color="#15803D" />
+                        </div>
+                        <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#16281D', margin: '0 0 8px' }}>Direct Creator Communication</h4>
+                        <p style={{ fontSize: '0.85rem', color: '#59655E', maxWidth: 360, margin: '0 0 16px', lineHeight: 1.5 }}>
+                          Start direct negotiation threads with creators, discuss campaign deliverables, and exchange draft media securely.
+                        </p>
+                        <button 
+                          type="button" 
+                          className="bd-hero-search-btn"
+                          style={{ fontSize: '0.82rem', padding: '9px 18px' }}
+                          onClick={() => setNewChatModalOpen(true)}
+                        >
+                          <Plus size={14} />
+                          <span>Message a Creator</span>
+                        </button>
                       </div>
                     );
                   }
@@ -3043,6 +3054,34 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                             )}
                             <div className={`bd-chat-bubble ${msg.sender === 'brand' ? 'outgoing' : 'incoming'}`}>
                               <div>{msg.text}</div>
+                              {/* Rich File/Media Attachment */}
+                              {msg.attachmentUrl && (
+                                <div style={{ marginTop: 8 }}>
+                                  {msg.attachmentUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) || msg.attachmentUrl.startsWith('data:image') ? (
+                                    <img 
+                                      src={msg.attachmentUrl} 
+                                      alt={msg.attachmentName || 'Attachment'} 
+                                      style={{ maxWidth: 240, maxHeight: 180, borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid rgba(0,0,0,0.1)' }} 
+                                    />
+                                  ) : msg.attachmentUrl.match(/\.(mp4|mov|webm)$/i) || msg.attachmentUrl.startsWith('data:video') ? (
+                                    <video 
+                                      src={msg.attachmentUrl} 
+                                      controls 
+                                      style={{ maxWidth: 280, maxHeight: 190, borderRadius: 8, display: 'block', background: '#000000' }} 
+                                    />
+                                  ) : (
+                                    <a 
+                                      href={msg.attachmentUrl} 
+                                      target="_blank" 
+                                      rel="noreferrer" 
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(0,0,0,0.06)', borderRadius: 6, fontSize: '0.8rem', color: 'inherit', textDecoration: 'none', fontWeight: 600 }}
+                                    >
+                                      <Paperclip size={13} />
+                                      <span>{msg.attachmentName || 'Download File'}</span>
+                                    </a>
+                                  )}
+                                </div>
+                              )}
                               {/* Rich Attachment or Proposal Card */}
                               {msg.cardType === 'brief' && msg.cardData && (
                                 <div className="bd-chat-card-attachment">
@@ -3084,14 +3123,29 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
 
                       {/* Chat Composer */}
                       <div className="bd-chat-composer">
-                        <button 
-                          type="button" 
+                        <label 
                           className="bd-top-icon-btn" 
-                          title="Attach Campaign Brief PDF or Guidelines"
-                          onClick={() => onShowToast('Simulated attachment upload: Campaign Brief PDF added.')}
+                          title="Attach Brief PDF, Image, or Video"
+                          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 0 }}
                         >
                           <Paperclip size={18} />
-                        </button>
+                          <input 
+                            type="file" 
+                            style={{ display: 'none' }}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                onShowToast(`Uploading "${file.name}"...`);
+                                try {
+                                  const url = await uploadMediaFile(file);
+                                  handleSendAttachedMessage(file.name, url);
+                                } catch {
+                                  onShowToast('Could not upload file.');
+                                }
+                              }
+                            }}
+                          />
+                        </label>
                         <input 
                           type="text" 
                           className="bd-chat-composer-input"
@@ -3189,16 +3243,53 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
 
                 {/* Requests List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {outgoingRequests
-                    .filter(r => {
+                  {(() => {
+                    const displayedRequests = outgoingRequests.filter(r => {
                       if (requestFilterStatus !== 'All' && r.status !== requestFilterStatus) return false;
                       if (requestSearchQuery.trim()) {
                         const q = requestSearchQuery.toLowerCase();
                         return r.creatorName.toLowerCase().includes(q) || r.campaignName.toLowerCase().includes(q) || r.id.toLowerCase().includes(q);
                       }
                       return true;
-                    })
-                    .map(req => (
+                    });
+
+                    if (displayedRequests.length === 0) {
+                      return (
+                        <div style={{
+                          background: '#FAF9F5',
+                          border: '1.5px dashed #D1DDD6',
+                          borderRadius: 16,
+                          padding: '48px 24px',
+                          textAlign: 'center',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 12
+                        }}>
+                          <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#EDF5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Handshake size={24} color="#15803D" />
+                          </div>
+                          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: '#19201C' }}>
+                            {requestFilterStatus !== 'All' || requestSearchQuery ? 'No matching proposals found' : 'No collaboration proposals sent yet'}
+                          </h3>
+                          <p style={{ fontSize: '0.86rem', color: '#59655E', maxWidth: 440, margin: 0, lineHeight: 1.5 }}>
+                            Explore verified creators in the marketplace, choose a package or custom deliverable, and send an escrow-protected campaign proposal.
+                          </p>
+                          <button 
+                            type="button" 
+                            className="bd-hero-search-btn"
+                            style={{ marginTop: 8 }}
+                            onClick={() => setActiveTab('discover')}
+                          >
+                            <Compass size={16} />
+                            <span>Discover Creators</span>
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return displayedRequests.map(req => (
                       <div 
                         key={req.id} 
                         style={{ 
@@ -3281,7 +3372,8 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                           </div>
                         </div>
                       </div>
-                    ))}
+                    ));
+                  })()}
                 </div>
               </div>
             )}
@@ -3351,7 +3443,39 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
 
                 {/* Campaign Cards Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: 20 }}>
-                  {campaigns.map(camp => {
+                  {campaigns.length === 0 ? (
+                    <div style={{
+                      gridColumn: '1 / -1',
+                      background: '#FAF9F5',
+                      border: '1.5px dashed #D1DDD6',
+                      borderRadius: 16,
+                      padding: '48px 24px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 12
+                    }}>
+                      <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#EDF5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Megaphone size={24} color="#15803D" />
+                      </div>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: '#19201C' }}>No active campaigns yet</h3>
+                      <p style={{ fontSize: '0.86rem', color: '#59655E', maxWidth: 440, margin: 0, lineHeight: 1.5 }}>
+                        Launch your first structured campaign to collaborate with verified creators, track milestones, and manage escrow disbursements.
+                      </p>
+                      <button 
+                        type="button" 
+                        className="bd-hero-search-btn"
+                        style={{ marginTop: 8 }}
+                        onClick={() => setCampaignModalOpen(true)}
+                      >
+                        <Plus size={16} />
+                        <span>Launch Your First Campaign</span>
+                      </button>
+                    </div>
+                  ) : (
+                    campaigns.map(camp => {
                     const percentComplete = Math.round((camp.completedDeliverablesCount / Math.max(camp.deliverablesCount, 1)) * 100);
                     const campCreators = enrichedCreators.filter(c => camp.creatorIds.includes(c.id));
 
@@ -3471,7 +3595,7 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                         </div>
                       </div>
                     );
-                  })}
+                  }))}
                 </div>
               </div>
             )}
@@ -3626,8 +3750,71 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
 
                 {/* SubTab 1: Profile */}
                 {settingsSubTab === 'profile' && (
-                  <form onSubmit={(e) => { e.preventDefault(); onShowToast('Company profile details saved.'); }}>
+                  <form onSubmit={async (e) => { 
+                    e.preventDefault(); 
+                    if (_currentUser) {
+                      const updatedUser: AuthUser = {
+                        ..._currentUser,
+                        companyName: brandProfile.companyName,
+                        avatarUrl: brandProfile.logoUrl || _currentUser.avatarUrl,
+                        niche: brandProfile.industry
+                      };
+                      localStorage.setItem('creatorly_auth_user', JSON.stringify(updatedUser));
+                      await saveUserToSupabase(updatedUser);
+                    }
+                    onShowToast('Company profile details saved to database.'); 
+                  }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 680 }}>
+                      
+                      {/* Logo Upload Section */}
+                      <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: 18, padding: 16, background: '#FAF9F5', borderRadius: 12, border: '1px solid #E5E8E4' }}>
+                        <img 
+                          src={brandProfile.logoUrl || "/images/talent-maya.jpg"} 
+                          alt="Brand Logo" 
+                          style={{ width: 68, height: 68, borderRadius: 12, objectFit: 'cover', border: '2px solid #D1DDD6', background: '#FFFFFF' }} 
+                        />
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#19201C', display: 'block' }}>
+                            Company / Brand Logo
+                          </span>
+                          <span style={{ fontSize: '0.76rem', color: '#59655E', display: 'block', margin: '2px 0 8px 0' }}>
+                            Upload high-res PNG, JPG or SVG. This logo represents your brand across creator storefronts and deals.
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <label className="bd-save-search-action-btn" style={{ cursor: 'pointer', margin: 0, padding: '6px 14px', background: '#FFFFFF' }}>
+                              <span>Choose Image File</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                style={{ display: 'none' }}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    onShowToast(`Uploading logo "${file.name}"...`);
+                                    try {
+                                      const url = await uploadMediaFile(file);
+                                      setBrandProfile(prev => ({ ...prev, logoUrl: url }));
+                                      onShowToast('Logo uploaded successfully!');
+                                    } catch {
+                                      onShowToast('Could not upload logo.');
+                                    }
+                                  }
+                                }}
+                              />
+                            </label>
+                            {brandProfile.logoUrl && (
+                              <button
+                                type="button"
+                                style={{ fontSize: '0.74rem', color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                onClick={() => setBrandProfile(prev => ({ ...prev, logoUrl: '' }))}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
                       <div style={{ gridColumn: 'span 2' }}>
                         <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#19201C', display: 'block', marginBottom: 6 }}>Company / Brand Legal Name</label>
                         <input 
@@ -4660,6 +4847,160 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Digital Scope of Work & Legal Agreement */}
+              <div style={{ padding: 18, borderRadius: 12, background: '#FFFFFF', border: '1.5px solid #15803D', boxShadow: '0 2px 8px rgba(21,128,61,0.06)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ShieldCheck size={20} color="#15803D" />
+                    <span style={{ fontSize: '0.94rem', fontWeight: 700, color: '#16281D' }}>Digital Collaboration Agreement</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', background: '#EDF5F0', color: '#15803D', padding: '3px 8px', borderRadius: 6, fontWeight: 700 }}>
+                    {selectedRequestForDrawer.agreementSignedByBrand && selectedRequestForDrawer.agreementSignedByCreator ? 'Fully Executed & Binding' : 'Legally Binding Agreement'}
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.78rem', color: '#59655E', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+                  Standard Creatorly IP licensing, revision SLA (2 rounds), and milestone escrow protection.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {/* Creator Signature */}
+                  <div style={{ padding: 10, borderRadius: 8, background: '#FAF9F5', border: '1px solid #E5E8E4' }}>
+                    <span style={{ fontSize: '0.7rem', color: '#828E86', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>Creator Signature</span>
+                    {selectedRequestForDrawer.agreementSignedByCreator ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <CheckCircle2 size={14} color="#15803D" />
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#15803D' }}>Signed ({selectedRequestForDrawer.agreementSignedByCreator})</span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.78rem', color: '#B45309', fontWeight: 600, display: 'block', marginTop: 4 }}>⏳ Awaiting Creator Sign</span>
+                    )}
+                  </div>
+
+                  {/* Brand Signature */}
+                  <div style={{ padding: 10, borderRadius: 8, background: '#FAF9F5', border: '1px solid #E5E8E4' }}>
+                    <span style={{ fontSize: '0.7rem', color: '#828E86', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>Brand Signatory</span>
+                    {selectedRequestForDrawer.agreementSignedByBrand ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <CheckCircle2 size={14} color="#15803D" />
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#15803D' }}>Signed ({selectedRequestForDrawer.agreementSignedByBrand})</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const signatoryName = brandProfile.companyName || 'Brand Partner';
+                          const signStamp = `${signatoryName} • ${new Date().toLocaleDateString('en-IN')}`;
+                          setOutgoingRequests(prev => prev.map(r => r.id === selectedRequestForDrawer.id ? { ...r, agreementSignedByBrand: signStamp } : r));
+                          setSelectedRequestForDrawer(prev => prev ? { ...prev, agreementSignedByBrand: signStamp } : null);
+
+                          const matchingReq = collaborationRequests?.find(r => r.id === selectedRequestForDrawer.id);
+                          if (matchingReq && onUpdateCollaborationRequest) {
+                            const updatedReq: CollaborationRequest = {
+                              ...matchingReq,
+                              agreementSignedByBrand: signStamp,
+                              timelineEvents: [
+                                {
+                                  id: `ev-${Date.now()}`,
+                                  timestamp: 'Just now',
+                                  actor: 'brand',
+                                  action: 'Digital Agreement Signed',
+                                  details: `Signed by brand signatory: ${signStamp}`
+                                },
+                                ...(matchingReq.timelineEvents || [])
+                              ]
+                            };
+                            onUpdateCollaborationRequest(updatedReq, `Signed digital agreement as ${signatoryName}!`);
+                          } else {
+                            if (onUpdateRequestStatus) {
+                              onUpdateRequestStatus(selectedRequestForDrawer.id, selectedRequestForDrawer.status, `Signed digital agreement by brand: ${signStamp}`);
+                            }
+                            onShowToast(`Signed digital agreement as ${signatoryName}!`);
+                          }
+                        }}
+                        style={{ marginTop: 4, width: '100%', padding: '6px 8px', background: '#15803D', color: '#FFFFFF', border: 'none', borderRadius: 6, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Sign Agreement as Brand ✍️
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Creative Draft & Script Reviewer */}
+              {selectedRequestForDrawer.videoDraftUrl && (
+                <div style={{ padding: 16, borderRadius: 12, background: '#FAF9F5', border: '1px solid #E5E8E4' }}>
+                  <strong style={{ fontSize: '0.88rem', color: '#19201C', display: 'block', marginBottom: 8 }}>
+                    🎥 Video Draft Submission for Review
+                  </strong>
+                  <video 
+                    src={selectedRequestForDrawer.videoDraftUrl} 
+                    controls 
+                    style={{ width: '100%', maxHeight: 220, borderRadius: 8, background: '#000000' }} 
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="bd-hero-search-btn"
+                      style={{ flex: 1, padding: '7px 12px', fontSize: '0.78rem', background: '#15803D' }}
+                      onClick={() => {
+                        const matchingReq = collaborationRequests?.find(r => r.id === selectedRequestForDrawer.id);
+                        if (matchingReq && onUpdateCollaborationRequest) {
+                          const updatedReq: CollaborationRequest = {
+                            ...matchingReq,
+                            pipelineStage: 'live_completed',
+                            timelineEvents: [
+                              {
+                                id: `ev-${Date.now()}`,
+                                timestamp: 'Just now',
+                                actor: 'brand',
+                                action: 'Video Draft Approved',
+                                details: `${brandProfile.companyName} approved the video draft. Creator authorized to publish deliverable.`
+                              },
+                              ...(matchingReq.timelineEvents || [])
+                            ]
+                          };
+                          onUpdateCollaborationRequest(updatedReq, 'Creative draft approved! Creator notified to publish live.');
+                        } else {
+                          onShowToast('Creative draft approved! Creator notified to publish live.');
+                        }
+                      }}
+                    >
+                      <Check size={14} />
+                      <span>Approve Draft</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="bd-save-search-action-btn"
+                      style={{ flex: 1, padding: '7px 12px', fontSize: '0.78rem', justifyContent: 'center' }}
+                      onClick={() => {
+                        const matchingReq = collaborationRequests?.find(r => r.id === selectedRequestForDrawer.id);
+                        if (matchingReq && onUpdateCollaborationRequest) {
+                          const updatedReq: CollaborationRequest = {
+                            ...matchingReq,
+                            pipelineStage: 'draft_review',
+                            timelineEvents: [
+                              {
+                                id: `ev-${Date.now()}`,
+                                timestamp: 'Just now',
+                                actor: 'brand',
+                                action: 'Creative Revision Requested',
+                                details: `${brandProfile.companyName} requested revisions on the submitted draft.`
+                              },
+                              ...(matchingReq.timelineEvents || [])
+                            ]
+                          };
+                          onUpdateCollaborationRequest(updatedReq, 'Revision requested. Creator has been notified.');
+                        } else {
+                          onShowToast('Revision requested. Creator has been notified.');
+                        }
+                      }}
+                    >
+                      <span>Request Revision</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ padding: '16px 24px', borderTop: '1px solid #E5E8E4', display: 'flex', gap: 10 }}>
@@ -4710,9 +5051,9 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                 endDate: newCampaignEndDate,
                 totalBudgetINR: newCampaignBudget,
                 spentBudgetINR: 0,
-                creatorIds: ['creator-food-rhea', 'creator-tech-arjun'],
-                deliverablesCount: 4,
-                completedDeliverablesCount: 1,
+                creatorIds: newCampaignCreatorIds.length > 0 ? newCampaignCreatorIds : ['creator-food-rhea', 'creator-tech-arjun'],
+                deliverablesCount: (newCampaignCreatorIds.length > 0 ? newCampaignCreatorIds.length : 2) * 2,
+                completedDeliverablesCount: 0,
                 milestones: [
                   { id: `ms-1-${Date.now()}`, label: 'Briefs Distributed', completed: true },
                   { id: `ms-2-${Date.now()}`, label: 'Product Sample Dispatches', completed: false },
@@ -4791,6 +5132,48 @@ export const BrandDashboard: React.FC<BrandDashboardProps> = ({
                       required
                       style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #E5E8E4' }}
                     />
+                  </div>
+                </div>
+
+                {/* Creator Picker */}
+                <div>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#19201C', display: 'block', marginBottom: 6 }}>
+                    Select Creators for Campaign ({newCampaignCreatorIds.length} Selected)
+                  </label>
+                  <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid #E5E8E4', borderRadius: 8, padding: 6, display: 'flex', flexDirection: 'column', gap: 6, background: '#FAF9F5' }}>
+                    {enrichedCreators.map(c => {
+                      const isSelected = newCampaignCreatorIds.includes(c.id);
+                      return (
+                        <label 
+                          key={c.id} 
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 10px',
+                            borderRadius: 6,
+                            background: isSelected ? '#EDF5F0' : '#FFFFFF',
+                            border: `1px solid ${isSelected ? '#86EFAC' : '#E2E8F0'}`,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={() => {
+                                setNewCampaignCreatorIds(prev => 
+                                  prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                                );
+                              }}
+                            />
+                            <img src={c.avatarUrl} alt={c.fullName} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#19201C' }}>{c.fullName}</span>
+                          </div>
+                          <span style={{ fontSize: '0.74rem', color: '#59655E' }}>{c.primaryNiche}</span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

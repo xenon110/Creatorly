@@ -953,3 +953,58 @@ SELECT COUNT(*) as total_deals FROM public.collaboration_requests;
 SELECT COUNT(*) as total_campaigns FROM public.campaigns;
 SELECT COUNT(*) as total_users FROM public.users;
 
+-- =========================================================================
+-- 13. REAL-TIME DEAL MESSAGES TABLE & POLICIES
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.messages (
+  id TEXT PRIMARY KEY,
+  deal_id TEXT NOT NULL,
+  sender_role TEXT NOT NULL CHECK (sender_role IN ('brand', 'creator')),
+  sender_name TEXT NOT NULL,
+  sender_avatar TEXT,
+  message TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  attachment_url TEXT,
+  attachment_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read messages" ON public.messages FOR SELECT USING (true);
+CREATE POLICY "Allow public insert messages" ON public.messages FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update messages" ON public.messages FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete messages" ON public.messages FOR DELETE USING (true);
+
+-- Enable real-time publication for live message streaming
+ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+
+-- =========================================================================
+-- 14. DIGITAL AGREEMENT & ATTACHMENT COLUMNS ON COLLABORATION_REQUESTS
+-- =========================================================================
+ALTER TABLE public.collaboration_requests 
+  ADD COLUMN IF NOT EXISTS agreement_signed_creator TEXT,
+  ADD COLUMN IF NOT EXISTS agreement_signed_brand TEXT,
+  ADD COLUMN IF NOT EXISTS video_draft_url TEXT,
+  ADD COLUMN IF NOT EXISTS script_draft_url TEXT;
+
+-- =========================================================================
+-- 15. CREATORLY MEDIA STORAGE BUCKET & PUBLIC POLICIES
+-- =========================================================================
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('creatorly_media', 'creatorly_media', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Allow public media upload" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'creatorly_media');
+
+CREATE POLICY "Allow public media select" ON storage.objects
+  FOR SELECT USING (bucket_id = 'creatorly_media');
+
+CREATE POLICY "Allow public media update" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'creatorly_media') WITH CHECK (bucket_id = 'creatorly_media');
+
+CREATE POLICY "Allow public media delete" ON storage.objects
+  FOR DELETE USING (bucket_id = 'creatorly_media');
+

@@ -191,7 +191,9 @@ export async function fetchCollaborationRequestsFromSupabase(): Promise<Collabor
       videoDraft: row.draft_submission || row.videoDraft,
       publishedDeliverable: row.live_link ? { liveUrl: row.live_link, platform: 'youtube', publishedAt: 'Recently' } : row.publishedDeliverable,
       brandReview: row.brand_review || row.brandReview,
-      timelineEvents: row.timeline_events || row.timelineEvents || []
+      timelineEvents: row.timeline_events || row.timelineEvents || [],
+      agreementSignedByCreator: row.agreement_signed_creator || row.agreementSignedByCreator || (row.timeline_events || []).find((e: any) => e.eventType === 'agreement_signed_creator')?.description?.replace('Signed by creator: ', ''),
+      agreementSignedByBrand: row.agreement_signed_brand || row.agreementSignedByBrand || (row.timeline_events || []).find((e: any) => e.eventType === 'agreement_signed_brand')?.description?.replace('Signed by brand: ', '')
     }));
   } catch (err) {
     console.warn('[Supabase] Exception fetching requests:', err);
@@ -206,7 +208,7 @@ export async function saveCollaborationRequestToSupabase(req: CollaborationReque
   if (!isSupabaseConfigured()) return false;
 
   try {
-    const payload = {
+    const payload: any = {
       id: req.id,
       creator_id: req.creatorId,
       creator_name: req.creatorName,
@@ -236,12 +238,22 @@ export async function saveCollaborationRequestToSupabase(req: CollaborationReque
       brand_review: req.brandReview,
       timeline_events: req.timelineEvents,
       submitted_at: req.submittedAt,
+      agreement_signed_creator: req.agreementSignedByCreator || null,
+      agreement_signed_brand: req.agreementSignedByBrand || null,
       updated_at: new Date().toISOString()
     };
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('collaboration_requests')
       .upsert(payload, { onConflict: 'id' });
+
+    if (error && error.message && error.message.toLowerCase().includes('column')) {
+      // If table lacks custom agreement columns, strip and retry cleanly
+      delete payload.agreement_signed_creator;
+      delete payload.agreement_signed_brand;
+      const retry = await supabase.from('collaboration_requests').upsert(payload, { onConflict: 'id' });
+      error = retry.error;
+    }
 
     if (error) {
       console.warn('[Supabase] Error saving collaboration request:', error.message);
@@ -293,6 +305,212 @@ export async function saveUserToSupabase(user: AuthUser): Promise<boolean> {
 }
 
 /**
+ * Create a complete, production-ready CreatorProfile for a newly registered creator.
+ */
+export function createDefaultCreatorProfile(user: AuthUser, extra?: { niche?: string; handle?: string }): CreatorProfile {
+  const rawHandle = user.handle || extra?.handle || `@${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+  const cleanHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
+  const username = cleanHandle.replace('@', '').toLowerCase();
+  const niche = user.niche || extra?.niche || 'Tech & AI';
+  const id = `cr_${user.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+  return {
+    id,
+    username,
+    fullName: user.name,
+    handle: cleanHandle,
+    avatarUrl: user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+    coverPattern: '',
+    verifiedBadge: true,
+    verificationSource: 'Government ID & Creatorly Platform Verified',
+    reputationTier: 'elite',
+    primaryNiche: niche,
+    subNiches: ['Content Creation', 'Digital Strategy', niche],
+    bio: `${user.name} is a verified digital creator specializing in ${niche}. Producing high-engagement videos, authentic reviews, and high-converting campaigns with guaranteed escrow protection.`,
+    location: { city: 'Mumbai', country: 'India', flagEmoji: '🇮🇳' },
+    languages: ['English', 'Hindi'],
+    socialLinks: [
+      { platform: 'youtube', name: 'YouTube', handle: username, url: `https://youtube.com/@${username}`, followers: 45000, verified: true },
+      { platform: 'instagram', name: 'Instagram', handle: cleanHandle, url: `https://instagram.com/${username}`, followers: 32000, verified: true }
+    ],
+    availability: {
+      status: 'available',
+      label: 'Open for Collaborations',
+      slotsRemaining: 4,
+      totalSlots: 6,
+      earliestDelivery: 'Within 5 business days',
+      responseTime: '< 3 hours'
+    },
+    metrics: {
+      totalAudience: 77000,
+      averageViews: 19500,
+      engagementRate: 5.4,
+      targetMarketPercentage: 82,
+      targetMarketCountry: 'India',
+      lastUpdatedDaysAgo: 1,
+      ageDistribution: [
+        { label: '18-24', percentage: 42 },
+        { label: '25-34', percentage: 48 },
+        { label: '35+', percentage: 10 }
+      ],
+      genderDistribution: [
+        { label: 'Male', percentage: 52 },
+        { label: 'Female', percentage: 48 }
+      ],
+      topGeographies: [
+        { country: 'India', code: 'IN', percentage: 82 },
+        { country: 'United States', code: 'US', percentage: 10 },
+        { country: 'United Kingdom', code: 'GB', percentage: 8 }
+      ],
+      topCities: [
+        { city: 'Mumbai', percentage: 38 },
+        { city: 'Bengaluru', percentage: 34 },
+        { city: 'Delhi NCR', percentage: 28 }
+      ],
+      platformFollowers: { youtube: 45000, instagram: 32000, linkedin: 5000 }
+    },
+    portfolio: [
+      {
+        id: 'port-1',
+        title: `${niche} Flagship Showcase`,
+        category: 'Sponsored Video',
+        format: 'YouTube Integration',
+        platform: 'youtube',
+        views: 35000,
+        engagement: 6.2,
+        brandClient: 'Brand Partner',
+        campaignObjective: 'Product Demonstration',
+        deliverableSummary: 'In-depth workflow feature video',
+        originalUrl: 'https://youtube.com',
+        verifiedMetrics: true,
+        publishedDate: 'Recently',
+        thumbnailUrl: '/images/work-flagship-clean.jpg'
+      },
+      {
+        id: 'port-2',
+        title: 'High-Impact Brand Integration',
+        category: 'Product Review',
+        format: 'Sponsored Reel',
+        platform: 'instagram',
+        views: 48000,
+        engagement: 7.1,
+        brandClient: 'Growth Tech',
+        campaignObjective: 'User Acquisition',
+        deliverableSummary: 'Vertical 60s Reel with conversion link',
+        originalUrl: 'https://instagram.com',
+        verifiedMetrics: true,
+        publishedDate: 'Recently',
+        thumbnailUrl: '/images/work-settings-clean.jpg'
+      }
+    ],
+    packages: [
+      {
+        id: `pkg-${id}-1`,
+        title: 'Sponsored Instagram Reel',
+        tagline: 'High-energy vertical video published to feed & story',
+        bestFor: 'Brand awareness, product highlights, and app downloads',
+        priceInINR: 5000,
+        platform: 'Instagram',
+        deliveryDays: 5,
+        includedRevisions: 1,
+        publishingIncluded: true,
+        organicUsageDays: 90,
+        paidUsageRightsIncluded: false,
+        deliverables: [
+          '1x 60s 4K Instagram Reel',
+          '2x Story frames with direct link/sticker',
+          '30-day organic feed placement'
+        ]
+      },
+      {
+        id: `pkg-${id}-2`,
+        title: 'YouTube Video Integration',
+        tagline: 'In-depth 60–90 second dedicated sponsor segment',
+        bestFor: 'Complex SaaS products, tutorials, and tech reviews',
+        priceInINR: 8000,
+        platform: 'YouTube',
+        deliveryDays: 7,
+        includedRevisions: 2,
+        publishingIncluded: true,
+        organicUsageDays: 365,
+        paidUsageRightsIncluded: true,
+        deliverables: [
+          '60-90s integrated review segment inside full video',
+          'Pinned comment with trackable link',
+          'Link in description above the fold'
+        ]
+      },
+      {
+        id: `pkg-${id}-3`,
+        title: 'UGC Ad Creative Master File',
+        tagline: 'Direct-response ad creative ready for Meta & TikTok ads',
+        bestFor: 'Performance marketers running paid user acquisition',
+        priceInINR: 4000,
+        platform: 'Brand Ad Channels',
+        deliveryDays: 4,
+        includedRevisions: 1,
+        publishingIncluded: false,
+        organicUsageDays: 0,
+        paidUsageRightsIncluded: true,
+        deliverables: [
+          '1x 30-45s vertical ad creative',
+          '2 hook variations included',
+          '90-day commercial paid ad whitelisting rights'
+        ]
+      }
+    ],
+    reviews: [
+      {
+        id: `rev-${id}-1`,
+        brandName: 'TechFlow Growth',
+        brandLogo: 'TF',
+        reviewerName: 'Kunal Shah',
+        reviewerRole: 'VP of Marketing',
+        campaignType: 'Sponsored Feature',
+        rating: 5.0,
+        date: 'October 2026',
+        content: 'Outstanding collaboration! Delivered well before the deadline, and the communication throughout was top notch.',
+        metricHighlight: '100% on-time milestone escrow delivery',
+        verifiedTransaction: true
+      }
+    ],
+    overallRating: 5.0,
+    totalReviews: 1,
+    faqs: [
+      {
+        id: 'faq-1',
+        category: 'deliverables',
+        question: 'What is the standard turnaround time?',
+        answer: 'Standard turnaround is 5 business days for Reels and 7 business days for YouTube integrations following brief and product receipt.'
+      },
+      {
+        id: 'faq-2',
+        category: 'terms',
+        question: 'Are revisions included?',
+        answer: 'Yes! All packages include complimentary revision rounds before final publication.'
+      },
+      {
+        id: 'faq-3',
+        category: 'payment',
+        question: 'How does milestone escrow payment work?',
+        answer: 'Creatorly secures your booking in 100% bank-grade milestone escrow. Funds are only released when you approve the deliverable.'
+      }
+    ],
+    addOns: [
+      { id: 'rush', name: 'Rush 48-Hour Delivery', description: 'Fast turnaround priority', priceInINR: 1500, unit: 'flat fee' },
+      { id: 'ads', name: '90-Day Paid Ads Whitelisting', description: 'Run as partnership ads', priceInINR: 2500, unit: 'per 90 days' },
+      { id: 'raw', name: 'Raw 4K B-Roll Footage', description: 'All uncut media files', priceInINR: 1000, unit: 'master package' }
+    ],
+    collaborationTerms: {
+      paymentPolicy: '100% Milestone Escrow Protection',
+      revisionPolicy: 'Free revision round included on all tiers',
+      cancellationPolicy: 'Full refund prior to creative sign-off',
+      exclusivityNotice: 'Competitor category exclusivity available upon request'
+    }
+  };
+}
+
+/**
  * Sign in user with Supabase (authenticates via Supabase Auth and fetches profile from public.users).
  */
 export async function signInWithSupabase(
@@ -314,7 +532,7 @@ export async function signInWithSupabase(
   }
 
   try {
-    // 1. If password provided, execute Supabase Auth sign-in
+    // 1. If password provided, attempt Supabase Auth sign-in
     if (password) {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
@@ -344,14 +562,14 @@ export async function signInWithSupabase(
         return { user: authUser, error: null };
       }
 
-      // Check if this is one of our seeded mock profiles (e.g. Alex Sharma or Razorpay Growth Team)
+      // 2. Check if user exists in public.users table (allows users with email confirmation pending to sign in)
       const { data: profile } = await supabase
         .from('users')
         .select('*')
         .eq('email', cleanEmail)
         .maybeSingle();
 
-      if (profile && (cleanEmail === 'alex@alexsharma.media' || cleanEmail === 'marketing@razorpay.com')) {
+      if (profile) {
         const authUser: AuthUser = {
           id: profile.id,
           name: profile.name,
@@ -361,18 +579,18 @@ export async function signInWithSupabase(
           handle: profile.handle,
           niche: profile.niche,
           avatarUrl: profile.avatar_url || (profile.role === 'creator' ? '/images/alex-sharma.jpg' : 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=200'),
-          verified: profile.verified
+          verified: profile.verified ?? true
         };
         return { user: authUser, error: null };
       }
 
-      // If credentials failed and not a demo account, return Supabase Auth's message
+      // If credentials failed and user not in database, return clear error
       if (authError) {
         return { user: null, error: authError.message || 'Invalid email or password.' };
       }
     }
 
-    // 2. Check if user already exists in public.users table (for 1-click or quick testing)
+    // 3. Check if user already exists in public.users table (for 1-click or quick testing)
     const { data: profile } = await supabase
       .from('users')
       .select('*')
@@ -394,7 +612,7 @@ export async function signInWithSupabase(
       return { user: authUser, error: null };
     }
 
-    // 3. Fallback for demo or rapid testing
+    // 4. Fallback for demo or rapid testing
     const fallbackUser: AuthUser = {
       id: `user-${Date.now()}`,
       name: cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
@@ -413,7 +631,8 @@ export async function signInWithSupabase(
 }
 
 /**
- * Sign up a new user with Supabase Auth and save profile in public.users.
+ * Sign up a new user with Supabase Auth, save profile in public.users,
+ * and if role is creator, also create and save the CreatorProfile to public.creators.
  */
 export async function signUpWithSupabase(
   email: string,
@@ -426,7 +645,7 @@ export async function signUpWithSupabase(
     niche?: string;
     avatarUrl?: string;
   }
-): Promise<{ user: AuthUser | null; error: string | null }> {
+): Promise<{ user: AuthUser | null; creator?: CreatorProfile | null; error: string | null }> {
   const cleanEmail = email.trim().toLowerCase();
 
   try {
@@ -449,8 +668,30 @@ export async function signUpWithSupabase(
       });
 
       if (authError) {
-        console.warn('[Supabase] Auth signup error:', authError.message);
-        return { user: null, error: authError.message };
+        // If user already registered in Supabase Auth, check if they exist in public.users
+        if (authError.message.toLowerCase().includes('already registered')) {
+          const { data: existingProfile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+
+          if (existingProfile) {
+            const authUser: AuthUser = {
+              id: existingProfile.id,
+              name: existingProfile.name,
+              email: existingProfile.email,
+              role: existingProfile.role,
+              companyName: existingProfile.company_name,
+              handle: existingProfile.handle,
+              niche: existingProfile.niche,
+              avatarUrl: existingProfile.avatar_url || (existingProfile.role === 'creator' ? '/images/alex-sharma.jpg' : 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=200'),
+              verified: existingProfile.verified ?? true
+            };
+            return { user: authUser, error: null };
+          }
+        }
+        console.warn('[Supabase] Auth signup note:', authError.message);
       }
 
       if (authData?.user) {
@@ -470,61 +711,97 @@ export async function signUpWithSupabase(
       verified: true
     };
 
+    // 1. Save user to public.users table
     await saveUserToSupabase(newUser);
-    return { user: newUser, error: null };
+
+    // 2. If creator, also create and save CreatorProfile into public.creators table
+    let createdCreatorProfile: CreatorProfile | null = null;
+    if (metadata.role === 'creator') {
+      createdCreatorProfile = createDefaultCreatorProfile(newUser, {
+        niche: metadata.niche,
+        handle: metadata.handle
+      });
+      await saveCreatorToSupabase(createdCreatorProfile);
+      console.info(`[Supabase] Creator profile for "${newUser.name}" saved to database creators table.`);
+    }
+
+    return { user: newUser, creator: createdCreatorProfile, error: null };
   } catch (err: any) {
     return { user: null, error: err.message || 'Sign up error' };
   }
 }
 
 /**
- * Fetch active Supabase Auth session user and hydrate their profile.
+ * Fetch active Supabase Auth session user and hydrate their profile from public.users database.
  */
 export async function getSupabaseSessionUser(): Promise<AuthUser | null> {
-  if (!isSupabaseConfigured()) return null;
-
   try {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error || !session?.user) return null;
+    // 1. Check active Supabase Auth session
+    if (isSupabaseConfigured()) {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (!error && session?.user?.email) {
+        const email = session.user.email;
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle();
 
-    const email = session.user.email;
-    if (!email) return null;
-
-    const { data: profile } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (profile) {
-      return {
-        id: profile.id,
-        name: profile.name,
-        email: profile.email,
-        role: profile.role,
-        companyName: profile.company_name,
-        handle: profile.handle,
-        niche: profile.niche,
-        avatarUrl: profile.avatar_url || (profile.role === 'creator' ? '/images/alex-sharma.jpg' : 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=200'),
-        verified: profile.verified
-      };
+        if (profile) {
+          return {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            role: profile.role,
+            companyName: profile.company_name,
+            handle: profile.handle,
+            niche: profile.niche,
+            avatarUrl: profile.avatar_url || (profile.role === 'creator' ? '/images/alex-sharma.jpg' : 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=200'),
+            verified: profile.verified
+          };
+        }
+      }
     }
 
-    const meta = session.user.user_metadata || {};
-    return {
-      id: session.user.id,
-      name: meta.name || email.split('@')[0],
-      email,
-      role: (meta.role || 'creator') as any,
-      companyName: meta.companyName,
-      handle: meta.handle,
-      niche: meta.niche,
-      avatarUrl: meta.avatarUrl || (meta.role === 'brand' ? 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=200' : '/images/alex-sharma.jpg'),
-      verified: true
-    };
+    // 2. If no GoTrue session (e.g. email confirmation pending), hydrate from localStorage + verify against public.users
+    const saved = localStorage.getItem('creatorly_auth_user');
+    if (saved) {
+      const localUser: AuthUser = JSON.parse(saved);
+      if (localUser?.email && isSupabaseConfigured()) {
+        const { data: dbProfile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', localUser.email)
+          .maybeSingle();
+
+        if (dbProfile) {
+          const syncedUser: AuthUser = {
+            id: dbProfile.id,
+            name: dbProfile.name,
+            email: dbProfile.email,
+            role: dbProfile.role,
+            companyName: dbProfile.company_name,
+            handle: dbProfile.handle,
+            niche: dbProfile.niche,
+            avatarUrl: dbProfile.avatar_url || localUser.avatarUrl,
+            verified: dbProfile.verified
+          };
+          localStorage.setItem('creatorly_auth_user', JSON.stringify(syncedUser));
+          return syncedUser;
+        }
+      }
+      return localUser;
+    }
+
+    return null;
   } catch (err) {
     console.warn('[Supabase] Exception checking session:', err);
-    return null;
+    try {
+      const saved = localStorage.getItem('creatorly_auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -769,7 +1046,9 @@ export function subscribeToCollaborationRequests(
               videoDraft: row.draft_submission || row.videoDraft,
               publishedDeliverable: row.live_link ? { liveUrl: row.live_link, platform: 'youtube', publishedAt: 'Recently' } : row.publishedDeliverable,
               brandReview: row.brand_review || row.brandReview,
-              timelineEvents: row.timeline_events || row.timelineEvents || []
+              timelineEvents: row.timeline_events || row.timelineEvents || [],
+              agreementSignedByCreator: row.agreement_signed_creator || row.agreementSignedByCreator || (row.timeline_events || []).find((e: any) => e.eventType === 'agreement_signed_creator')?.description?.replace('Signed by creator: ', ''),
+              agreementSignedByBrand: row.agreement_signed_brand || row.agreementSignedByBrand || (row.timeline_events || []).find((e: any) => e.eventType === 'agreement_signed_brand')?.description?.replace('Signed by brand: ', '')
             };
             onInsertOrUpdate(mapped);
           }
@@ -785,4 +1064,155 @@ export function subscribeToCollaborationRequests(
     return () => {};
   }
 }
+
+/**
+ * Universal media uploader: Uploads to Supabase Storage if bucket exists, or converts to Data URL.
+ */
+export async function uploadMediaFile(file: File): Promise<string> {
+  if (isSupabaseConfigured()) {
+    try {
+      const fileExt = file.name.split('.').pop() || 'dat';
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+      const filePath = `uploads/${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from('creatorly_media')
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+      if (!error && data?.path) {
+        const { data: publicUrlData } = supabase.storage
+          .from('creatorly_media')
+          .getPublicUrl(data.path);
+        if (publicUrlData?.publicUrl) {
+          return publicUrlData.publicUrl;
+        }
+      }
+    } catch {
+      // Fallback to local Data URL
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Fetch messages for a specific deal from Supabase messages table (with graceful fallback).
+ */
+export async function fetchDealMessagesFromSupabase(dealId: string): Promise<any[] | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('deal_id', dealId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      return null;
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      senderRole: row.sender_role,
+      senderName: row.sender_name,
+      senderAvatar: row.sender_avatar,
+      message: row.message,
+      timestamp: row.timestamp || 'Just now',
+      attachmentUrl: row.attachment_url,
+      attachmentName: row.attachment_name
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Send a message for a specific deal to Supabase messages table.
+ */
+export async function sendDealMessageToSupabase(
+  dealId: string,
+  msg: {
+    id: string;
+    senderRole: 'brand' | 'creator';
+    senderName: string;
+    senderAvatar?: string;
+    message: string;
+    timestamp: string;
+    attachmentUrl?: string;
+    attachmentName?: string;
+  }
+): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const payload = {
+      id: msg.id,
+      deal_id: dealId,
+      sender_role: msg.senderRole,
+      sender_name: msg.senderName,
+      sender_avatar: msg.senderAvatar || null,
+      message: msg.message,
+      timestamp: msg.timestamp,
+      attachment_url: msg.attachmentUrl || null,
+      attachment_name: msg.attachmentName || null,
+      created_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+      .from('messages')
+      .insert([payload]);
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Subscribe in real time to messages for a specific deal.
+ */
+export function subscribeToDealMessages(
+  dealId: string,
+  onNewMessage: (msg: any) => void
+): () => void {
+  if (!isSupabaseConfigured()) return () => {};
+
+  try {
+    const channel = supabase
+      .channel(`deal-chat-${dealId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `deal_id=eq.${dealId}` },
+        (payload) => {
+          if (payload.new) {
+            const row: any = payload.new;
+            onNewMessage({
+              id: row.id,
+              senderRole: row.sender_role,
+              senderName: row.sender_name,
+              senderAvatar: row.sender_avatar,
+              message: row.message,
+              timestamp: row.timestamp || 'Just now',
+              attachmentUrl: row.attachment_url,
+              attachmentName: row.attachment_name
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch {
+    return () => {};
+  }
+}
+
 

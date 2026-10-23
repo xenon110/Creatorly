@@ -19,7 +19,9 @@ import {
   subscribeToCollaborationRequests,
   signOutFromSupabase,
   getSupabaseSessionUser,
-  onAuthStateChange
+  onAuthStateChange,
+  createDefaultCreatorProfile,
+  sendDealMessageToSupabase
 } from './lib/supabaseClient';
 import { GlobalNavbar } from './components/GlobalNavbar';
 import { SmartMatchSection } from './components/SmartMatchSection';
@@ -40,18 +42,6 @@ import SculptureHero from '@/components/ui/liquid-sculpture-hero';
 import { MarketplaceInfoPages } from './components/pages/MarketplaceInfoPages';
 
 export const App: React.FC = () => {
-  const [creators, setCreators] = useState<CreatorProfile[]>(ALL_CREATORS);
-  const [activeView, setActiveView] = useState<'smartmatch' | 'discover' | 'creator-profile' | 'inbox' | 'kinetic-hero' | 'auth' | 'workspace' | 'info-page'>('creator-profile');
-  const [activePageSlug, setActivePageSlug] = useState<string>('about-creatorly');
-  const [previousView, setPreviousView] = useState<string>('creator-profile');
-  const [selectedCreator, setSelectedCreator] = useState<CreatorProfile>(ALL_CREATORS[0]);
-  const [currentCurrency, setCurrentCurrency] = useState<CurrencyCode>('INR');
-  const [shortlistedCreatorIds, setShortlistedCreatorIds] = useState<string[]>([]);
-  const [compareModalOpen, setCompareModalOpen] = useState(false);
-  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
-  const [collaborationRequests, setCollaborationRequests] = useState<CollaborationRequest[]>(INITIAL_COLLABORATION_REQUESTS);
-  const [targetPipelineRequestId, setTargetPipelineRequestId] = useState<string | null>(null);
-
   // User Authentication & Session State
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     try {
@@ -61,6 +51,29 @@ export const App: React.FC = () => {
       return null;
     }
   });
+
+  const [activeView, setActiveView] = useState<'smartmatch' | 'discover' | 'creator-profile' | 'inbox' | 'kinetic-hero' | 'auth' | 'workspace' | 'info-page'>(() => {
+    try {
+      const saved = localStorage.getItem('creatorly_auth_user');
+      if (saved) {
+        const user = JSON.parse(saved);
+        if (user && user.role === 'brand') return 'discover';
+        if (user && user.role === 'creator') return 'workspace';
+      }
+    } catch {}
+    return 'creator-profile';
+  });
+
+  const [creators, setCreators] = useState<CreatorProfile[]>(ALL_CREATORS);
+  const [activePageSlug, setActivePageSlug] = useState<string>('about-creatorly');
+  const [previousView, setPreviousView] = useState<string>('creator-profile');
+  const [selectedCreator, setSelectedCreator] = useState<CreatorProfile>(ALL_CREATORS[0]);
+  const [currentCurrency, setCurrentCurrency] = useState<CurrencyCode>('INR');
+  const [shortlistedCreatorIds, setShortlistedCreatorIds] = useState<string[]>([]);
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
+  const [collaborationRequests, setCollaborationRequests] = useState<CollaborationRequest[]>(INITIAL_COLLABORATION_REQUESTS);
+  const [targetPipelineRequestId, setTargetPipelineRequestId] = useState<string | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalInitialTab, setAuthModalInitialTab] = useState<'signin' | 'signup'>('signin');
   const [authModalInitialRole, setAuthModalInitialRole] = useState<UserRole>('creator');
@@ -82,6 +95,29 @@ export const App: React.FC = () => {
     fetchCreatorsFromSupabase().then((liveCreators) => {
       if (liveCreators && liveCreators.length > 0) {
         setCreators(liveCreators);
+        
+        // If current user is a creator, match their profile!
+        const savedUserStr = localStorage.getItem('creatorly_auth_user');
+        const user = savedUserStr ? JSON.parse(savedUserStr) : null;
+        if (user && user.role === 'creator') {
+          const matchingCreator = liveCreators.find(
+            (c) => c.id === user.id ||
+                   c.id === `cr_${user.id.replace(/[^a-zA-Z0-9_-]/g, '_')}` ||
+                   c.handle === user.handle ||
+                   c.fullName.toLowerCase() === user.name.toLowerCase()
+          );
+          if (matchingCreator) {
+            setSelectedCreator(matchingCreator);
+            console.info(`[Creatorly] Active creator storefront matched: ${matchingCreator.fullName}`);
+            return;
+          } else {
+            const dynamicCreator = createDefaultCreatorProfile(user);
+            setCreators((prev) => [dynamicCreator, ...prev.filter((c) => c.id !== dynamicCreator.id)]);
+            setSelectedCreator(dynamicCreator);
+            console.info(`[Creatorly] Created and activated storefront for logged-in creator: ${dynamicCreator.fullName}`);
+            return;
+          }
+        }
         setSelectedCreator(liveCreators[0]);
         console.info(`[Creatorly] Loaded ${liveCreators.length} verified creators from Supabase.`);
       }
@@ -108,20 +144,24 @@ export const App: React.FC = () => {
       });
     });
 
-    // Check & hydrate Supabase Auth session
+    // Check & hydrate Supabase Auth session from public.users database
     getSupabaseSessionUser().then((sessionUser) => {
       if (sessionUser) {
         setCurrentUser(sessionUser);
         localStorage.setItem('creatorly_auth_user', JSON.stringify(sessionUser));
+        if (sessionUser.role === 'creator') {
+          setPipelinePerspective('creator');
+          setActiveView((prev) => (prev === 'creator-profile' ? 'workspace' : prev));
+        } else {
+          setPipelinePerspective('brand');
+          setActiveView((prev) => (prev === 'creator-profile' ? 'discover' : prev));
+        }
       }
     });
 
     // Listen to real-time auth changes across tabs or token refresh
     const unsubscribeAuth = onAuthStateChange((sessionUser) => {
-      if (!sessionUser) {
-        setCurrentUser(null);
-        localStorage.removeItem('creatorly_auth_user');
-      } else {
+      if (sessionUser) {
         setCurrentUser(sessionUser);
         localStorage.setItem('creatorly_auth_user', JSON.stringify(sessionUser));
       }
@@ -148,32 +188,49 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLoginSuccess = (user: AuthUser, destination?: 'pipeline' | 'storefront' | 'discover' | 'workspace') => {
+  const handleLoginSuccess = (
+    user: AuthUser, 
+    destination?: 'pipeline' | 'storefront' | 'discover' | 'workspace',
+    createdCreator?: CreatorProfile
+  ) => {
     setCurrentUser(user);
     localStorage.setItem('creatorly_auth_user', JSON.stringify(user));
     saveUserToSupabase(user);
     setAuthModalOpen(false);
+
     if (user.role === 'creator') {
       setPipelinePerspective('creator');
+      if (createdCreator) {
+        setCreators((prev) => {
+          const exists = prev.some((c) => c.id === createdCreator.id);
+          return exists ? prev.map((c) => (c.id === createdCreator.id ? createdCreator : c)) : [createdCreator, ...prev];
+        });
+        setSelectedCreator(createdCreator);
+        saveCreatorToSupabase(createdCreator);
+      } else {
+        const matchingCreator = creators.find(
+          (c) => c.id === user.id ||
+                 c.id === `cr_${user.id.replace(/[^a-zA-Z0-9_-]/g, '_')}` ||
+                 c.handle === user.handle ||
+                 c.fullName.toLowerCase() === user.name.toLowerCase()
+        );
+        if (matchingCreator) {
+          setSelectedCreator(matchingCreator);
+        }
+      }
     } else {
       setPipelinePerspective('brand');
     }
 
-    const target = destination || authTargetDestination || (user.role === 'creator' ? 'workspace' : 'discover');
-
-    if (target === 'workspace') {
-      setActiveView('workspace');
-    } else if (target === 'discover') {
-      setActiveView('discover');
-    } else if (target === 'pipeline') {
+    if (destination === 'pipeline') {
       setActiveView('inbox');
-    } else if (target === 'storefront') {
-      setActiveView('creator-profile');
+    } else if (user.role === 'creator') {
+      setActiveView('workspace');
     } else {
-      setActiveView(user.role === 'creator' ? 'workspace' : 'discover');
+      setActiveView('discover');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast(`Welcome, ${user.name}! Logged in as ${user.role === 'creator' ? 'Creator' : 'User (Brand)'}.`);
+    showToast(`Welcome, ${user.name}! Logged in as ${user.role === 'creator' ? 'Creator' : 'Brand'}.`);
   };
 
   const handleLogout = async () => {
@@ -343,7 +400,7 @@ export const App: React.FC = () => {
             ...(r.timelineEvents || [])
           ];
 
-          return {
+          const updatedReq: CollaborationRequest = {
             ...r,
             status: 'completed',
             pipelineStage: 'live_completed',
@@ -355,6 +412,8 @@ export const App: React.FC = () => {
             },
             timelineEvents: newEvents
           };
+          saveCollaborationRequestToSupabase(updatedReq);
+          return updatedReq;
         }
         return r;
       })
@@ -460,6 +519,13 @@ export const App: React.FC = () => {
     setCollaborationRequests((prev) => [newRequest, ...prev]);
     setTargetPipelineRequestId(data.referenceId);
     saveCollaborationRequestToSupabase(newRequest);
+    sendDealMessageToSupabase(data.referenceId, {
+      id: `msg-${Date.now()}`,
+      senderRole: 'brand',
+      senderName: data.brandName,
+      message: data.message,
+      timestamp: 'Just now'
+    });
     showToast(`Inquiry sent to ${data.creator.fullName}! Deal card opened in Workflow Pipeline.`);
   };
 
@@ -545,47 +611,33 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* VIEW 2: Brand/Client Discovery Marketplace (Protected: Requires User / Brand Login) */}
+      {/* VIEW 2: Brand/Client Discovery Marketplace (Browse Creators & Rates) */}
       {activeView === 'discover' && (
-        (!currentUser || currentUser.role !== 'brand') ? (
-          <div className="view-wrapper auth-page-view">
-            <AuthPage
-              initialTab="signin"
-              initialRole="brand"
-              targetDestination="discover"
-              onLoginSuccess={handleLoginSuccess}
-              onBack={() => {
-                setActiveView('creator-profile');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              onShowToast={showToast}
-            />
-          </div>
-        ) : (
-          <BrandDashboard
-            creators={creators}
-            currentCurrency={currentCurrency}
-            onSelectCreator={handleSelectCreator}
-            onShowToast={showToast}
-            onNavigateToWorkspace={() => {
-              if (!currentUser || currentUser.role !== 'creator') {
-                handleOpenAuthWithDestination('signin', 'creator', 'workspace');
-              } else {
-                setActiveView('workspace');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
-            }}
-            currentUser={currentUser}
-            onLogout={handleLogout}
-            onReturnToHome={() => {
-              setActiveView('creator-profile');
+        <BrandDashboard
+          creators={creators}
+          currentCurrency={currentCurrency}
+          onSelectCreator={handleSelectCreator}
+          onShowToast={showToast}
+          onNavigateToWorkspace={() => {
+            if (!currentUser || currentUser.role !== 'creator') {
+              handleOpenAuthWithDestination('signup', 'creator', 'workspace');
+              showToast('Register as a creator to enter your workspace');
+            } else {
+              setActiveView('workspace');
               window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            collaborationRequests={collaborationRequests}
-            onBookingSubmitted={handleBookingSubmitted}
-            onUpdateRequestStatus={handleUpdateRequestStatus}
-          />
-        )
+            }
+          }}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          onReturnToHome={() => {
+            setActiveView('creator-profile');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          collaborationRequests={collaborationRequests}
+          onBookingSubmitted={handleBookingSubmitted}
+          onUpdateRequestStatus={handleUpdateRequestStatus}
+          onUpdateCollaborationRequest={handleUpdateCollaborationRequest}
+        />
       )}
 
       {/* VIEW 3: Creator Public Profile Storefront (/creators/:username) */}
@@ -598,20 +650,14 @@ export const App: React.FC = () => {
             currentCurrency={currentCurrency}
             onShowToast={showToast}
             onBackToMarketplace={() => {
-              if (!currentUser || currentUser.role !== 'brand') {
-                handleOpenAuthWithDestination('signin', 'brand', 'discover');
-              } else {
-                setActiveView('discover');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
+              setActiveView('discover');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              showToast('Browsing verified creators & transparent rate cards');
             }}
             onNavigateToMarketplace={() => {
-              if (!currentUser || currentUser.role !== 'brand') {
-                handleOpenAuthWithDestination('signin', 'brand', 'discover');
-              } else {
-                setActiveView('discover');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
+              setActiveView('discover');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              showToast('Browsing verified creators & transparent rate cards');
             }}
             onBookingSubmitted={handleBookingSubmitted}
             onMessageSubmitted={handleMessageSubmitted}
@@ -626,10 +672,12 @@ export const App: React.FC = () => {
             onOpenAuth={handleOpenAuth}
             onNavigateToWorkspace={() => {
               if (!currentUser || currentUser.role !== 'creator') {
-                handleOpenAuthWithDestination('signin', 'creator', 'workspace');
+                handleOpenAuthWithDestination('signup', 'creator', 'workspace');
+                showToast('Register as a creator to set up your profile & rate card');
               } else {
                 setActiveView('workspace');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+                showToast(`Welcome to your Creator Workspace, ${currentUser.name.split(' ')[0]}!`);
               }
             }}
             previousView={previousView}
@@ -853,6 +901,7 @@ moves culture."
           onShowToast={showToast}
           onBookingSubmitted={handleBookingSubmitted}
           onViewInPipeline={handleViewInPipeline}
+          currentUser={currentUser}
         />
       )}
 

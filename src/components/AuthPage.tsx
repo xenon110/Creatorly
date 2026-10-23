@@ -17,7 +17,7 @@ interface AuthPageProps {
   initialTab?: 'signin' | 'signup';
   initialRole?: UserRole;
   targetDestination?: 'workspace' | 'discover' | 'pipeline' | 'storefront';
-  onLoginSuccess: (user: AuthUser, destination?: 'workspace' | 'discover' | 'pipeline' | 'storefront') => void;
+  onLoginSuccess: (user: AuthUser, destination?: any, createdCreator?: any) => void;
   onBack: () => void;
   onShowToast: (msg: string) => void;
 }
@@ -25,7 +25,7 @@ interface AuthPageProps {
 export const AuthPage: React.FC<AuthPageProps> = ({
   initialTab = 'signin',
   initialRole = 'creator',
-  targetDestination,
+  targetDestination: _targetDestination,
   onLoginSuccess,
   onBack,
   onShowToast
@@ -81,7 +81,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       verified: true
     };
     onLoginSuccess(demoUser, 'discover');
-    onShowToast('Logged in as User / Brand: Razorpay Growth Team');
+    onShowToast('Logged in as Brand: Razorpay Growth Team');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -98,7 +98,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
-    const destination = targetDestination || ((role === 'creator') ? 'workspace' : 'discover');
+    const destination = (role === 'creator') ? 'workspace' : 'discover';
     setIsSubmitting(true);
 
     try {
@@ -114,7 +114,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
 
-        const { user: newUser, error } = await signUpWithSupabase(email, password, {
+        const { user: newUser, creator: createdCreator, error } = await signUpWithSupabase(email, password, {
           name: role === 'creator' ? fullName.trim() : companyName.trim(),
           role,
           handle: role === 'creator' ? (handle.startsWith('@') ? handle.trim() : `@${handle.trim() || 'creator'}`) : undefined,
@@ -128,8 +128,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
 
-        onLoginSuccess(newUser, destination);
-        onShowToast(`Account created! Welcome to Creatorly, ${newUser.name}.`);
+        onLoginSuccess(newUser, destination, createdCreator);
+        onShowToast(`Account created and saved in database! Welcome to Creatorly, ${newUser.name}.`);
       } else {
         const { user: signedInUser, error } = await signInWithSupabase(email, password, role);
 
@@ -211,7 +211,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </button>
             </div>
 
-            {/* Role Switcher: Creator vs User (Brand) */}
+            {/* Role Switcher: Creator vs Brand / Business */}
             <div className="auth-role-tabs">
               <button
                 type="button"
@@ -227,7 +227,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 onClick={() => setRole('brand')}
               >
                 <Building2 size={16} />
-                <span>User (Brand)</span>
+                <span>Brand / Business</span>
               </button>
             </div>
 
@@ -408,8 +408,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   {isSubmitting
                     ? (tab === 'signin' ? 'Authenticating...' : 'Creating Account...')
                     : (tab === 'signin'
-                      ? (role === 'creator' ? 'Sign In as Creator' : 'Sign In as User / Brand')
-                      : (role === 'creator' ? 'Create Creator Account' : 'Register User / Brand Account'))}
+                      ? (role === 'creator' ? 'Sign In as Creator' : 'Sign In as Brand')
+                      : (role === 'creator' ? 'Create Creator Account' : 'Register Brand Account'))}
                 </span>
                 <ArrowRight size={17} />
               </button>
@@ -442,7 +442,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </button>
               <span className="dot-divider">•</span>
               <button type="button" className="btn-quick-pill" onClick={handleQuickDemoBrand}>
-                Razorpay (User / Brand)
+                Razorpay (Brand)
               </button>
             </div>
           </div>

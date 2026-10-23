@@ -1,13 +1,20 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type {
   CollaborationRequest,
   CollaborationRequestStatus,
   PipelineStage,
   CurrencyCode,
   CreatorProfile,
-  TimelineEvent
+  TimelineEvent,
+  DealChatMessage
 } from '../types/creator';
 import { formatCurrency } from '../data/currencies';
+import {
+  uploadMediaFile,
+  sendDealMessageToSupabase,
+  fetchDealMessagesFromSupabase,
+  subscribeToDealMessages
+} from '../lib/supabaseClient';
 import {
   Inbox,
   Check,
@@ -30,7 +37,11 @@ import {
   User,
   Zap,
   CheckCircle2,
-  X
+  X,
+  MessageSquare,
+  Paperclip,
+  UploadCloud,
+  FileCheck2
 } from 'lucide-react';
 
 interface CreatorInboxProps {
@@ -112,6 +123,108 @@ export const CreatorInbox: React.FC<CreatorInboxProps> = ({
   const [activeReviewModalReq, setActiveReviewModalReq] = useState<CollaborationRequest | null>(null);
   const [reviewRating, setReviewRating] = useState<number>(5);
   const [reviewTextInput, setReviewTextInput] = useState('');
+
+  // Interactive Live Chat & Agreement States
+  const [dealMessages, setDealMessages] = useState<DealChatMessage[]>([]);
+  const [chatInputText, setChatInputText] = useState('');
+  const [chatAttachment, setChatAttachment] = useState<{ url: string; name: string } | null>(null);
+  const [isUploadingChatFile, setIsUploadingChatFile] = useState(false);
+  const [uploadedDraftVideo, setUploadedDraftVideo] = useState<{ url: string; name: string } | null>(null);
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync Deal Messages on selectedRequest change
+  useEffect(() => {
+    if (selectedRequest) {
+      if (selectedRequest.chatMessages && selectedRequest.chatMessages.length > 0) {
+        setDealMessages(selectedRequest.chatMessages);
+      } else {
+        const initialMsg: DealChatMessage = {
+          id: `msg-init-${selectedRequest.id}`,
+          senderRole: 'brand',
+          senderName: selectedRequest.brandName,
+          message: selectedRequest.campaignBrief || `Hello! We are excited to collaborate on ${selectedRequest.serviceTitle}. Looking forward to reviewing the creative concept.`,
+          timestamp: selectedRequest.submittedAt || 'Initial Brief'
+        };
+        setDealMessages([initialMsg]);
+      }
+
+      fetchDealMessagesFromSupabase(selectedRequest.id).then((liveMsgs) => {
+        if (liveMsgs && liveMsgs.length > 0) {
+          setDealMessages(liveMsgs);
+        }
+      });
+
+      const unsubscribe = subscribeToDealMessages(selectedRequest.id, (incomingMsg) => {
+        setDealMessages((prev) => {
+          if (prev.some((m) => m.id === incomingMsg.id)) return prev;
+          return [...prev, incomingMsg];
+        });
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, [selectedRequest?.id]);
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [dealMessages.length]);
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedRequest || (!chatInputText.trim() && !chatAttachment)) return;
+
+    const newMsg: DealChatMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      senderRole: perspective,
+      senderName: perspective === 'creator' ? selectedRequest.creatorName : selectedRequest.brandName,
+      senderAvatar: perspective === 'creator' ? selectedRequest.creatorAvatar : undefined,
+      message: chatInputText.trim() || (chatAttachment ? `Attached file: ${chatAttachment.name}` : ''),
+      timestamp: 'Just now',
+      attachmentUrl: chatAttachment?.url,
+      attachmentName: chatAttachment?.name
+    };
+
+    const updatedMessages = [...dealMessages, newMsg];
+    setDealMessages(updatedMessages);
+    setChatInputText('');
+    setChatAttachment(null);
+
+    const updatedReq: CollaborationRequest = {
+      ...selectedRequest,
+      chatMessages: updatedMessages,
+      timelineEvents: appendTimelineEvent(
+        selectedRequest,
+        `New Message from ${perspective === 'creator' ? selectedRequest.creatorName : selectedRequest.brandName}`,
+        newMsg.message.slice(0, 80),
+        perspective
+      )
+    };
+    setSelectedRequest(updatedReq);
+    onUpdateCollaborationRequest?.(updatedReq);
+    sendDealMessageToSupabase(selectedRequest.id, newMsg);
+    onShowToast(`Message sent to ${perspective === 'creator' ? selectedRequest.brandName : selectedRequest.creatorName}`);
+  };
+
+  const handleSignAgreement = (role: 'creator' | 'brand') => {
+    if (!selectedRequest) return;
+    const signTime = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const signerName = role === 'creator' ? selectedRequest.creatorName : selectedRequest.brandName;
+
+    const updatedReq: CollaborationRequest = {
+      ...selectedRequest,
+      ...(role === 'creator' ? { agreementSignedByCreator: signTime } : { agreementSignedByBrand: signTime }),
+      timelineEvents: appendTimelineEvent(
+        selectedRequest,
+        `Collaboration Agreement Digitally Signed by ${signerName}`,
+        `Terms ratifying milestone escrow, IP ownership rights, and deliverable specifications officially signed on ${signTime}.`,
+        role
+      )
+    };
+    setSelectedRequest(updatedReq);
+    onUpdateCollaborationRequest?.(updatedReq, `Agreement officially signed by ${signerName}!`);
+  };
 
   // Handle target request when navigated from Booking modal
   useEffect(() => {
@@ -1817,13 +1930,24 @@ export const CreatorInbox: React.FC<CreatorInboxProps> = ({
                     </div>
 
                     <div className="video-draft-player-box">
-                      <div className="mock-player-frame">
-                        <div className="play-pulse-circle">
-                          <Check size={24} className="text-emerald-400" />
+                      {selectedRequest.videoDraft.draftUrl && (selectedRequest.videoDraft.draftUrl.startsWith('data:video') || selectedRequest.videoDraft.draftUrl.includes('.mp4') || selectedRequest.videoDraft.draftUrl.includes('.mov') || selectedRequest.videoDraft.draftUrl.includes('.webm')) ? (
+                        <div style={{ borderRadius: 12, overflow: 'hidden', background: '#000', marginBottom: 12 }}>
+                          <video 
+                            src={selectedRequest.videoDraft.draftUrl} 
+                            controls 
+                            playsInline
+                            style={{ width: '100%', maxHeight: 340, display: 'block' }} 
+                          />
                         </div>
-                        <span className="player-meta-tag">4K 60FPS • PRORES MASTER</span>
-                        <span className="player-link-text">{selectedRequest.videoDraft.draftUrl}</span>
-                      </div>
+                      ) : (
+                        <div className="mock-player-frame">
+                          <div className="play-pulse-circle">
+                            <Check size={24} className="text-emerald-400" />
+                          </div>
+                          <span className="player-meta-tag">4K 60FPS • PRORES MASTER</span>
+                          <span className="player-link-text">{selectedRequest.videoDraft.draftUrl}</span>
+                        </div>
+                      )}
                       <p className="draft-notes-text">
                         <strong>Creator Notes:</strong> {selectedRequest.videoDraft.revisionNotes || '4K vertical video rendered and color graded.'}
                       </p>
@@ -1912,6 +2036,218 @@ export const CreatorInbox: React.FC<CreatorInboxProps> = ({
                       <p>{selectedRequest.brandContactPerson} ({selectedRequest.brandEmail})</p>
                     </div>
                   </div>
+                </div>
+
+                {/* Digital Collaboration Agreement & Terms Sign-Off */}
+                <div className="drawer-section card agreement-card" style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: 14, padding: 18 }}>
+                  <div className="drawer-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FileCheck2 size={18} className="text-emerald-600" />
+                      <h5 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>Digital Scope of Work & Legal Agreement</h5>
+                    </div>
+                    <span style={{ fontSize: '0.72rem', background: '#E2E8F0', padding: '2px 8px', borderRadius: 6, fontWeight: 700, color: '#334155' }}>
+                      REF: {selectedRequest.id}-AGR
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.5, marginBottom: 14 }}>
+                    <p style={{ margin: '0 0 8px 0' }}>
+                      By digitally signing below, <strong>{selectedRequest.brandName}</strong> and <strong>{selectedRequest.creatorName}</strong> ratify the following legal collaboration parameters:
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <li><strong>Scope:</strong> {selectedRequest.serviceTitle} ({selectedRequest.deliverables.join(', ')})</li>
+                      <li><strong>Milestone Escrow:</strong> 100% funds locked safely prior to production; disbursed only on verified live publication.</li>
+                      <li><strong>Commercial Rights:</strong> Perpetual organic distribution rights on creator profile + 90-day brand digital ad whitelisting.</li>
+                      <li><strong>Revision Bounds:</strong> Up to 2 complimentary revision rounds included prior to final rendering.</li>
+                      <li><strong>Delivery Deadline:</strong> Deliverable due on or before <strong>{selectedRequest.proposedDeadline}</strong>.</li>
+                    </ul>
+                  </div>
+
+                  {/* Dual Signatures Status / Action Buttons */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: '1px solid #E2E8F0', paddingTop: 14 }}>
+                    {/* Creator Signature */}
+                    <div style={{ background: selectedRequest.agreementSignedByCreator ? '#ECFDF5' : '#FFFFFF', border: selectedRequest.agreementSignedByCreator ? '1px solid #A7F3D0' : '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: 4 }}>
+                        CREATOR SIGNATURE
+                      </span>
+                      {selectedRequest.agreementSignedByCreator ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#059669', fontSize: '0.82rem', fontWeight: 700 }}>
+                          <CheckCircle2 size={16} />
+                          <span>Signed: {selectedRequest.creatorName}</span>
+                          <span style={{ fontSize: '0.68rem', color: '#047857', display: 'block' }}>({selectedRequest.agreementSignedByCreator})</span>
+                        </div>
+                      ) : (
+                        perspective === 'creator' ? (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ width: '100%', fontSize: '0.78rem', padding: '6px 12px' }}
+                            onClick={() => handleSignAgreement('creator')}
+                          >
+                            <FileCheck2 size={13} />
+                            <span>Sign Agreement as Creator</span>
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>Awaiting creator digital sign-off</span>
+                        )
+                      )}
+                    </div>
+
+                    {/* Brand Signature */}
+                    <div style={{ background: selectedRequest.agreementSignedByBrand ? '#ECFDF5' : '#FFFFFF', border: selectedRequest.agreementSignedByBrand ? '1px solid #A7F3D0' : '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: 4 }}>
+                        BRAND SIGNATURE
+                      </span>
+                      {selectedRequest.agreementSignedByBrand ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#059669', fontSize: '0.82rem', fontWeight: 700 }}>
+                          <CheckCircle2 size={16} />
+                          <span>Signed: {selectedRequest.brandName}</span>
+                          <span style={{ fontSize: '0.68rem', color: '#047857', display: 'block' }}>({selectedRequest.agreementSignedByBrand})</span>
+                        </div>
+                      ) : (
+                        perspective === 'brand' ? (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ width: '100%', fontSize: '0.78rem', padding: '6px 12px' }}
+                            onClick={() => handleSignAgreement('brand')}
+                          >
+                            <FileCheck2 size={13} />
+                            <span>Sign Agreement as Brand</span>
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>Awaiting brand digital sign-off</span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Two-Way Live In-Deal Chat Messenger */}
+                <div className="drawer-section card chat-card" style={{ background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 14, overflow: 'hidden' }}>
+                  <div style={{ padding: '14px 18px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <MessageSquare size={16} className="text-blue-600" />
+                      <h5 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800 }}>Deal Negotiation & Live Chat</h5>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }}></span>
+                      <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700 }}>Real-Time Live</span>
+                    </div>
+                  </div>
+
+                  {/* Messages Feed */}
+                  <div style={{ padding: 18, maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, background: '#FAFAFA' }}>
+                    {dealMessages.map((msg) => {
+                      const isMe = msg.senderRole === perspective;
+                      return (
+                        <div
+                          key={msg.id}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: isMe ? 'flex-end' : 'flex-start',
+                            maxWidth: '82%',
+                            alignSelf: isMe ? 'flex-end' : 'flex-start'
+                          }}
+                        >
+                          <span style={{ fontSize: '0.7rem', color: '#64748B', marginBottom: 2, fontWeight: 600 }}>
+                            {msg.senderName} ({msg.senderRole === 'creator' ? 'Creator' : 'Brand'}) • {msg.timestamp}
+                          </span>
+                          <div
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: 12,
+                              background: isMe ? '#16281D' : '#FFFFFF',
+                              color: isMe ? '#FFFFFF' : '#0F172A',
+                              border: isMe ? 'none' : '1px solid #E2E8F0',
+                              fontSize: '0.84rem',
+                              lineHeight: 1.45,
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                            }}
+                          >
+                            <p style={{ margin: 0 }}>{msg.message}</p>
+                            {msg.attachmentUrl && (
+                              <div style={{ marginTop: 8, paddingTop: 8, borderTop: isMe ? '1px solid rgba(255,255,255,0.2)' : '1px solid #E2E8F0' }}>
+                                <a 
+                                  href={msg.attachmentUrl} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  style={{ color: isMe ? '#86EFAC' : '#2563EB', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, textDecoration: 'none' }}
+                                >
+                                  <Paperclip size={12} />
+                                  <span>{msg.attachmentName || 'View Attachment'}</span>
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div ref={chatBottomRef} />
+                  </div>
+
+                  {/* Chat Input Bar */}
+                  <form onSubmit={handleSendMessage} style={{ padding: '12px 14px', borderTop: '1px solid #E2E8F0', background: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {chatAttachment && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ECFDF5', padding: '6px 10px', borderRadius: 6, fontSize: '0.78rem', color: '#065F46' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Paperclip size={13} />
+                          <strong>Attached:</strong> {chatAttachment.name}
+                        </span>
+                        <button type="button" onClick={() => setChatAttachment(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#DC2626' }}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <label style={{ cursor: 'pointer', color: '#64748B', padding: 6, display: 'flex', alignItems: 'center' }} title="Attach file or image">
+                        <Paperclip size={18} />
+                        <input
+                          type="file"
+                          style={{ display: 'none' }}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setIsUploadingChatFile(true);
+                              try {
+                                const url = await uploadMediaFile(file);
+                                setChatAttachment({ url, name: file.name });
+                                onShowToast(`Attached file "${file.name}"`);
+                              } catch {
+                                onShowToast('Failed to attach file.');
+                              } finally {
+                                setIsUploadingChatFile(false);
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={`Reply as ${perspective === 'creator' ? selectedRequest.creatorName : selectedRequest.brandName}...`}
+                        value={chatInputText}
+                        onChange={(e) => setChatInputText(e.target.value)}
+                        style={{
+                          flex: 1,
+                          border: '1px solid #CBD5E1',
+                          borderRadius: 8,
+                          padding: '8px 12px',
+                          fontSize: '0.84rem',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        style={{ padding: '8px 16px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        disabled={isUploadingChatFile || (!chatInputText.trim() && !chatAttachment)}
+                      >
+                        <Send size={14} />
+                        <span>Send</span>
+                      </button>
+                    </div>
+                  </form>
                 </div>
 
                 {/* Real-Time Chronological Activity History / Audit Trail */}
@@ -2165,15 +2501,55 @@ export const CreatorInbox: React.FC<CreatorInboxProps> = ({
                 </p>
 
                 <div className="form-group">
-                  <label htmlFor="draft-url">Unlisted Video Review URL *</label>
-                  <input
-                    id="draft-url"
-                    type="url"
-                    required
-                    value={draftUrlInput}
-                    onChange={(e) => setDraftUrlInput(e.target.value)}
-                    className="form-input"
-                  />
+                  <label htmlFor="draft-url">Video Review File or Link *</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <label 
+                        className="btn btn-secondary" 
+                        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, margin: 0, padding: '7px 14px' }}
+                      >
+                        <UploadCloud size={15} />
+                        <span>Upload Video File (.mp4, .mov)</span>
+                        <input 
+                          type="file" 
+                          accept="video/*"
+                          style={{ display: 'none' }}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const mediaUrl = await uploadMediaFile(file);
+                                setDraftUrlInput(mediaUrl);
+                                setUploadedDraftVideo({ url: mediaUrl, name: file.name });
+                                onShowToast(`Video file "${file.name}" loaded for draft submission!`);
+                              } catch {
+                                onShowToast('Failed to load video file.');
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+                      <span style={{ fontSize: '12px', color: uploadedDraftVideo ? '#059669' : '#64748B', fontWeight: 600 }}>
+                        {uploadedDraftVideo ? `✓ Loaded: ${uploadedDraftVideo.name}` : 'Or paste review link below'}
+                      </span>
+                    </div>
+
+                    {draftUrlInput && (draftUrlInput.startsWith('data:video') || draftUrlInput.includes('.mp4') || draftUrlInput.includes('.mov') || draftUrlInput.includes('.webm')) && (
+                      <div style={{ borderRadius: 10, overflow: 'hidden', background: '#000', maxHeight: 220 }}>
+                        <video src={draftUrlInput} controls style={{ width: '100%', maxHeight: 220, display: 'block' }} />
+                      </div>
+                    )}
+
+                    <input
+                      id="draft-url"
+                      type="text"
+                      required
+                      placeholder="https://vimeo.com/... or uploaded video link"
+                      value={draftUrlInput}
+                      onChange={(e) => setDraftUrlInput(e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
                 </div>
 
                 <div className="form-group">

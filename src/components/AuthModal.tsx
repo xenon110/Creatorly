@@ -22,7 +22,7 @@ import {
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLoginSuccess: (user: AuthUser, destination?: 'pipeline' | 'storefront' | 'discover' | 'workspace') => void;
+  onLoginSuccess: (user: AuthUser, destination?: any, createdCreator?: any) => void;
   initialTab?: 'signin' | 'signup';
   initialRole?: UserRole;
   targetDestination?: 'workspace' | 'discover' | 'pipeline' | 'storefront';
@@ -35,7 +35,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLoginSuccess,
   initialTab = 'signin',
   initialRole = 'creator',
-  targetDestination,
+  targetDestination: _targetDestination,
   onShowToast
 }) => {
   const [tab, setTab] = useState<'signin' | 'signup'>(initialTab);
@@ -102,7 +102,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    const destination = targetDestination || (role === 'creator' ? 'workspace' : 'discover');
+    const destination = (role === 'creator') ? 'workspace' : 'discover';
     setIsSubmitting(true);
 
     try {
@@ -118,7 +118,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           return;
         }
 
-        const { user: newUser, error } = await signUpWithSupabase(email, password, {
+        const { user: newUser, creator: createdCreator, error } = await signUpWithSupabase(email, password, {
           name: role === 'creator' ? fullName.trim() : companyName.trim(),
           role,
           handle: role === 'creator' ? (handle.startsWith('@') ? handle.trim() : `@${handle.trim() || 'creator'}`) : undefined,
@@ -132,7 +132,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           return;
         }
 
-        onLoginSuccess(newUser, destination);
+        onLoginSuccess(newUser, destination, createdCreator);
         onShowToast(`Account created! Welcome to Creatorly, ${newUser.name}.`);
         onClose();
       } else {

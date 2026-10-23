@@ -15,6 +15,7 @@ interface MessageModalProps {
     referenceId: string;
     creator: CreatorProfile;
   }) => void;
+  currentUser?: any;
 }
 
 export const MessageModal: React.FC<MessageModalProps> = ({
@@ -23,10 +24,11 @@ export const MessageModal: React.FC<MessageModalProps> = ({
   creator,
   onShowToast,
   onMessageSubmitted,
+  currentUser,
 }) => {
   const [topic, setTopic] = useState('Custom Campaign Quote');
-  const [brandName, setBrandName] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
+  const [brandName, setBrandName] = useState(currentUser?.companyName || currentUser?.name || '');
+  const [contactEmail, setContactEmail] = useState(currentUser?.email || '');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);

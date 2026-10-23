@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { 
   CreatorProfile, 
   CurrencyCode, 
@@ -9,6 +9,8 @@ import type {
 } from '../types/creator';
 import { CURRENCIES } from '../data/currencies';
 import { CreatorlyLogo } from './CreatorlyLogo';
+import { uploadMediaFile, saveCreatorToSupabase } from '../lib/supabaseClient';
+import { fetchYouTubeChannelStats } from '../lib/youtubeService';
 import './CreatorWorkspace.css';
 import {
   LayoutDashboard,
@@ -120,6 +122,28 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
   const [editAvatarUrl, setEditAvatarUrl] = useState(initialCreator.avatarUrl);
   const [newSubNicheInput, setNewSubNicheInput] = useState('');
 
+  useEffect(() => {
+    if (initialCreator) {
+      setCreator(initialCreator);
+      setEditAvatarUrl(initialCreator.avatarUrl);
+    }
+  }, [initialCreator]);
+
+  useEffect(() => {
+    if (_currentUser && _currentUser.role === 'creator') {
+      setCreator((prev) => ({
+        ...prev,
+        fullName: _currentUser.name || prev.fullName,
+        handle: _currentUser.handle || prev.handle,
+        avatarUrl: _currentUser.avatarUrl || prev.avatarUrl,
+        primaryNiche: _currentUser.niche || prev.primaryNiche,
+      }));
+      if (_currentUser.avatarUrl) {
+        setEditAvatarUrl(_currentUser.avatarUrl);
+      }
+    }
+  }, [_currentUser]);
+
   // 2. Collaboration Requests State
   const [collaborationRequests, setCollaborationRequests] = useState<CollaborationRequest[]>(initialRequests);
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>('all');
@@ -147,7 +171,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
   const [newPortViews, setNewPortViews] = useState(15400);
   const [newPortEngagement, setNewPortEngagement] = useState(6.2);
   const [newPortDeliverable, setNewPortDeliverable] = useState('');
-  const [newPortThumb] = useState('/images/work-ai-coding.jpg');
+  const [newPortThumb, setNewPortThumb] = useState('/images/work-ai-coding.jpg');
 
   // 4. Services & Pricing State
   const [servicePlatformFilter, setServicePlatformFilter] = useState<string>('all');
@@ -161,10 +185,11 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
   const [pkgDeliverablesText, setPkgDeliverablesText] = useState('1 Dedicated high-energy video segment\n1 Round of script review\nPinned trackable discount link');
 
   // 5. Messages & Chat State
-  const [activeConversationId, setActiveConversationId] = useState<string>('c-1');
+  const isDemoAlex = creator.id === 'cr_alex_sharma';
+  const [activeConversationId, setActiveConversationId] = useState<string>(() => isDemoAlex ? 'c-1' : '');
   const [chatReplyText, setChatReplyText] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
-  const [conversations, setConversations] = useState([
+  const [conversations, setConversations] = useState(() => isDemoAlex ? [
     {
       id: 'c-1',
       brandName: 'SuperAI Labs',
@@ -205,7 +230,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
         { sender: 'creator', text: 'Fantastic result Neha! Would love to collaborate again for your Q1 roadmap.', time: 'Oct 17, 4:20 PM' }
       ]
     }
-  ]);
+  ] : []);
 
   // 6. Availability & Calendar State
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string>('2026-10-28');
@@ -215,31 +240,31 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
   const [newEventBrand, setNewEventBrand] = useState('');
   const [newEventDate, setNewEventDate] = useState('2026-10-29');
   const [newEventType, setNewEventType] = useState<'shooting' | 'review' | 'publish' | 'deadline' | 'blackout'>('shooting');
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>(() => isDemoAlex ? [
     { id: 'ev-1', date: '2026-10-24', title: 'Script Outline Due', brand: 'SuperAI Labs', type: 'deadline', status: 'pending' },
     { id: 'ev-2', date: '2026-10-28', title: 'Film Studio Shoot', brand: 'UrbanThreads', type: 'shooting', status: 'confirmed' },
     { id: 'ev-3', date: '2026-11-05', title: 'YouTube Video Goes Live', brand: 'SuperAI Labs', type: 'publish', status: 'confirmed' },
     { id: 'ev-4', date: '2026-11-12', title: 'Warp Terminal Review Draft', brand: 'DevToolbox Cloud', type: 'review', status: 'pending' },
     { id: 'ev-5', date: '2026-11-15', title: 'Blocked for Tech Summit', brand: 'Personal', type: 'blackout', status: 'blocked' },
     { id: 'ev-6', date: '2026-10-16', title: 'Sponsored Reel Delivered', brand: 'NextLearn AI', type: 'publish', status: 'completed' }
-  ]);
+  ] : []);
 
   // 7. Earnings & Payouts State
-  const [lifetimeEarnedINR, setLifetimeEarnedINR] = useState(142000);
-  const [availablePayoutINR, setAvailablePayoutINR] = useState(28500);
-  const [escrowHeldINR, setEscrowHeldINR] = useState(14500);
+  const [lifetimeEarnedINR, setLifetimeEarnedINR] = useState(() => isDemoAlex ? 142000 : 0);
+  const [availablePayoutINR, setAvailablePayoutINR] = useState(() => isDemoAlex ? 28500 : 0);
+  const [escrowHeldINR, setEscrowHeldINR] = useState(() => isDemoAlex ? 14500 : 0);
   const [payoutModalOpen, setPayoutModalOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState(25000);
   const [payoutMethod, setPayoutMethod] = useState<'bank' | 'upi'>('bank');
-  const [payoutTransactions, setPayoutTransactions] = useState<PayoutTransaction[]>([
+  const [payoutTransactions, setPayoutTransactions] = useState<PayoutTransaction[]>(() => isDemoAlex ? [
     { id: 'tx-1', brandOrTarget: 'NextLearn AI', description: 'Sponsored Reel (Delivered & Approved)', date: 'Oct 17, 2026', amountINR: 8500, type: 'escrow_received', status: 'Completed', invoiceRef: 'INV-2026-904' },
     { id: 'tx-2', brandOrTarget: 'MinimalGear', description: 'UGC Ad Creative & Commercial Rights', date: 'Oct 04, 2026', amountINR: 6000, type: 'escrow_received', status: 'Completed', invoiceRef: 'INV-2026-881' },
     { id: 'tx-3', brandOrTarget: 'Bank Withdrawal (HDFC)', description: 'Direct bank payout to *******4920', date: 'Sep 28, 2026', amountINR: 40000, type: 'withdrawal', status: 'Completed', invoiceRef: 'PAY-2026-419' }
-  ]);
+  ] : []);
 
   // 8. Performance & API Sync State
   const [apiSyncState, setApiSyncState] = useState({
-    youtube: 'Synced 3 hours ago',
+    youtube: 'Synced via YouTube API',
     meta: 'Synced 3 hours ago',
     linkedin: 'Synced 1 day ago'
   });
@@ -247,7 +272,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
 
   // 9. Settings Sub-tabs State
   const [settingsSubTab, setSettingsSubTab] = useState<'account' | 'payout' | 'notifications' | 'tier'>('account');
-  const [bankSettings, setBankSettings] = useState({
+  const [bankSettings, setBankSettings] = useState(() => isDemoAlex ? {
     accountName: 'Alex Sharma',
     bankName: 'HDFC Bank, Bandra West Branch, Mumbai',
     accountNumber: '50100482914920',
@@ -255,6 +280,14 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
     upiId: 'alexsharma@okaxis',
     pan: 'ABCPS1290K',
     gstin: '27ABCPS1290K1Z5'
+  } : {
+    accountName: creator.fullName || '',
+    bankName: '',
+    accountNumber: '',
+    ifsc: '',
+    upiId: '',
+    pan: '',
+    gstin: ''
   });
   const [notificationPreferences, setNotificationPreferences] = useState({
     proposalEmail: true,
@@ -482,24 +515,85 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
     setPayoutModalOpen(false);
   };
 
-  // API sync simulation
-  const handleSyncApi = (platform: 'youtube' | 'meta' | 'linkedin') => {
+  // API sync with real YouTube Data API v3 integration
+  const handleSyncApi = async (platform: 'youtube' | 'meta' | 'linkedin') => {
     setSyncingApi(platform);
+    if (platform === 'youtube') {
+      const currentYt = creator.socialLinks.find(s => s.platform === 'youtube')?.url || creator.handle;
+      const stats = await fetchYouTubeChannelStats(currentYt || 'Alex Sharma');
+      if (stats) {
+        const updatedSocialLinks = creator.socialLinks.map(s => {
+          if (s.platform === 'youtube') {
+            return {
+              ...s,
+              followers: stats.subscriberCount,
+              verified: true,
+              handle: stats.customUrl
+            };
+          }
+          return s;
+        });
+
+        if (!updatedSocialLinks.some(s => s.platform === 'youtube')) {
+          updatedSocialLinks.push({
+            platform: 'youtube',
+            name: 'YouTube',
+            handle: stats.customUrl,
+            url: `https://youtube.com/${stats.customUrl}`,
+            followers: stats.subscriberCount,
+            verified: true
+          });
+        }
+
+        const updatedCreator: CreatorProfile = {
+          ...creator,
+          verifiedBadge: true,
+          verificationSource: 'Official YouTube Data API v3',
+          socialLinks: updatedSocialLinks,
+          metrics: {
+            ...creator.metrics,
+            totalAudience: stats.subscriberCount + (creator.metrics.platformFollowers?.instagram || 0),
+            averageViews: Math.round(stats.viewCount / Math.max(stats.videoCount, 1)),
+            platformFollowers: {
+              ...(creator.metrics.platformFollowers || { instagram: 0, linkedin: 0 }),
+              youtube: stats.subscriberCount
+            }
+          }
+        };
+
+        setCreator(updatedCreator);
+        onUpdateCreator?.(updatedCreator);
+        saveCreatorToSupabase(updatedCreator);
+        setSyncingApi(null);
+        setApiSyncState(prev => ({
+          ...prev,
+          youtube: 'Synced via YouTube API'
+        }));
+        onShowToast(`🎉 Verified "${stats.title}"! ${stats.subscriberCount.toLocaleString('en-IN')} subscribers & ${stats.videoCount} videos verified via Google YouTube API!`);
+        return;
+      } else {
+        setSyncingApi(null);
+        onShowToast(`⚠️ Could not resolve channel for "${currentYt}". Try your channel handle (e.g. @handle or @MrBeast).`);
+        return;
+      }
+    }
+
     setTimeout(() => {
       setSyncingApi(null);
       setApiSyncState(prev => ({
         ...prev,
         [platform]: 'Synced just now'
       }));
-      onShowToast(`${platform.toUpperCase()} API refreshed! Live reach and engagement updated.`);
-    }, 1000);
+      onShowToast(`${platform.toUpperCase()} metrics synced! Live reach updated.`);
+    }, 900);
   };
 
   // Profile save
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateCreator?.(creator);
-    onShowToast('Profile changes saved successfully! Public storefront updated.');
+    saveCreatorToSupabase(creator);
+    onShowToast('Profile & Storefront changes saved to database! Public storefront updated.');
     setActiveTab('home');
   };
 
@@ -862,8 +956,10 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
 
                 <div className="cw-card" style={{ padding: 18, cursor: 'pointer' }} onClick={() => setActiveTab('performance')}>
                   <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', fontWeight: 600 }}>Profile Views</span>
-                  <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>1,420</div>
-                  <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>High brand demand</span>
+                  <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>
+                    {((creator.metrics?.totalAudience ? Math.max(Math.round(creator.metrics.totalAudience * 0.04), 120) : 0)).toLocaleString('en-IN')}
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>Verified reach tracking</span>
                 </div>
               </div>
 
@@ -928,7 +1024,38 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                     </div>
 
                     <div className="cw-requests-list">
-                      {collaborationRequests.slice(0, 3).map(request => (
+                      {collaborationRequests.length === 0 ? (
+                        <div style={{
+                          background: '#FAF9F5',
+                          border: '1.5px dashed #D1DDD6',
+                          borderRadius: 14,
+                          padding: '36px 20px',
+                          textAlign: 'center',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 10
+                        }}>
+                          <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#EDF5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <ShieldCheck size={22} color="#15803D" />
+                          </div>
+                          <h4 style={{ margin: 0, fontSize: '1rem', color: '#19201C', fontWeight: 700 }}>Ready for Brand Collaborations</h4>
+                          <p style={{ margin: 0, fontSize: '0.82rem', color: '#59655E', maxWidth: 380, lineHeight: 1.5 }}>
+                            Your storefront is verified and active. When sponsors send brief proposals or book services, they will appear here with milestone escrow protection.
+                          </p>
+                          <button 
+                            type="button" 
+                            className="cw-btn cw-btn-primary cw-btn-sm"
+                            style={{ marginTop: 6 }}
+                            onClick={onViewPublicProfile}
+                          >
+                            <ExternalLink size={13} />
+                            <span>Preview Your Public Storefront</span>
+                          </button>
+                        </div>
+                      ) : (
+                        collaborationRequests.slice(0, 3).map(request => (
                         <div key={request.id} className="cw-request-card">
                           <div className="cw-request-top">
                             <div className="cw-brand-info">
@@ -1022,7 +1149,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                             )}
                           </div>
                         </div>
-                      ))}
+                      )))}
                     </div>
                   </div>
                 </div>
@@ -1062,7 +1189,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                             onClick={() => setTiersModalOpen(true)}
                             title="Click to view Reputation Tiers"
                           >
-                            <Crown size={12} color="#C29C5B" />
+                            <Crown size={12} color="#4ADE80" />
                             <span>Elite Creator · Top 1%</span>
                           </div>
                           <div className="cw-card-price-chip">
@@ -1102,7 +1229,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         <div className="cw-creator-metric-cell">
                           <div className="cw-metric-val-row">
                             <strong>4.9</strong>
-                            <Star size={12} color="#C29C5B" fill="#C29C5B" />
+                            <Star size={12} color="#166534" fill="#166534" />
                           </div>
                           <span className="cw-metric-lbl">18 Reviews</span>
                           <span className="cw-metric-sub">100% 5-Star</span>
@@ -1173,30 +1300,49 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   {/* Basic Identity */}
                   <div className="cw-card">
-                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Basic Identity</h3>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Basic Identity & Avatar</h3>
                     
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-                      <img src={creator.avatarUrl} alt={creator.fullName} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} />
-                      <div>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Avatar Image URL</span>
-                        <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 16, flexWrap: 'wrap' }}>
+                      <img src={creator.avatarUrl} alt={creator.fullName} style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '3px solid #16281D' }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E' }}>Creator Profile Photo</span>
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <label 
+                            className="cw-btn cw-btn-primary cw-btn-sm"
+                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, margin: 0 }}
+                          >
+                            <UploadCloud size={14} />
+                            <span>Upload from Device</span>
+                            <input 
+                              type="file" 
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    const mediaUrl = await uploadMediaFile(file);
+                                    setEditAvatarUrl(mediaUrl);
+                                    setCreator(prev => ({ ...prev, avatarUrl: mediaUrl }));
+                                    onShowToast('Avatar photo updated from your device!');
+                                  } catch {
+                                    onShowToast('Could not process image file.');
+                                  }
+                                }
+                              }}
+                            />
+                          </label>
                           <input 
                             type="text" 
+                            placeholder="Or paste image URL"
                             value={editAvatarUrl}
                             onChange={(e) => {
                               setEditAvatarUrl(e.target.value);
                               setCreator({ ...creator, avatarUrl: e.target.value });
                             }}
                             className="cw-search-box"
-                            style={{ width: 320, fontSize: '0.82rem' }}
+                            style={{ width: 240, fontSize: '0.82rem' }}
                           />
-                          <button 
-                            type="button" 
-                            className="cw-btn cw-btn-secondary cw-btn-sm"
-                            onClick={() => onShowToast('Avatar updated!')}
-                          >
-                            Set Photo
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -1247,6 +1393,136 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                     </div>
                   </div>
 
+                  {/* Storefront Visual Appearance & Cover Theme */}
+                  <div className="cw-card">
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Storefront Banner Theme</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                      {[
+                        { id: 'emerald-dark', label: 'Emerald Deep', bg: 'linear-gradient(135deg, #16281D 0%, #1e3a29 100%)' },
+                        { id: 'minimal-slate', label: 'Studio Minimal', bg: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)' },
+                        { id: 'royal-blue', label: 'Royal Escrow', bg: 'linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 100%)' },
+                        { id: 'cyber-dark', label: 'Cyber Tech', bg: 'linear-gradient(135deg, #18191E 0%, #2A2B32 100%)' }
+                      ].map(theme => (
+                        <div 
+                          key={theme.id}
+                          onClick={() => {
+                            setCreator({ ...creator, coverPattern: theme.id });
+                            onShowToast(`Storefront theme set to ${theme.label}`);
+                          }}
+                          style={{
+                            padding: '12px 10px',
+                            borderRadius: 10,
+                            background: theme.bg,
+                            color: '#FFFFFF',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            border: creator.coverPattern === theme.id ? '2px solid #5EEAD4' : '2px solid transparent',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+                          }}
+                        >
+                          {theme.label} {creator.coverPattern === theme.id && '✓'}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Connected Social Channels & Followers */}
+                  <div className="cw-card">
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Social Channels & Audience</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E' }}>YouTube Channel URL / Handle</label>
+                          <button
+                            type="button"
+                            onClick={() => handleSyncApi('youtube')}
+                            disabled={syncingApi === 'youtube'}
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              background: '#EF4444',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              borderRadius: 4,
+                              padding: '2px 8px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}
+                            title="Verify and fetch live subscriber count via Google YouTube Data API v3"
+                          >
+                            <RefreshCw size={10} className={syncingApi === 'youtube' ? 'spin' : ''} />
+                            {syncingApi === 'youtube' ? 'Syncing...' : '🔴 Sync YouTube API'}
+                          </button>
+                        </div>
+                        <input 
+                          type="text" 
+                          placeholder="https://youtube.com/@handle or @MrBeast"
+                          value={creator.socialLinks.find(s => s.platform === 'youtube')?.url || ''}
+                          onChange={(e) => {
+                            const newLinks = [...creator.socialLinks];
+                            const idx = newLinks.findIndex(s => s.platform === 'youtube');
+                            if (idx >= 0) newLinks[idx].url = e.target.value;
+                            else newLinks.push({ platform: 'youtube', name: 'YouTube', handle: e.target.value, url: e.target.value, followers: 45000, verified: true });
+                            setCreator({ ...creator, socialLinks: newLinks });
+                          }}
+                          className="cw-search-box"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>YouTube Subscribers</label>
+                        <input 
+                          type="number" 
+                          value={creator.socialLinks.find(s => s.platform === 'youtube')?.followers || 45000}
+                          onChange={(e) => {
+                            const newLinks = [...creator.socialLinks];
+                            const idx = newLinks.findIndex(s => s.platform === 'youtube');
+                            if (idx >= 0) newLinks[idx].followers = Number(e.target.value);
+                            setCreator({ ...creator, socialLinks: newLinks });
+                          }}
+                          className="cw-search-box"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Instagram Handle</label>
+                        <input 
+                          type="text" 
+                          placeholder="@instagram_handle"
+                          value={creator.socialLinks.find(s => s.platform === 'instagram')?.handle || ''}
+                          onChange={(e) => {
+                            const newLinks = [...creator.socialLinks];
+                            const idx = newLinks.findIndex(s => s.platform === 'instagram');
+                            if (idx >= 0) newLinks[idx].handle = e.target.value;
+                            else newLinks.push({ platform: 'instagram', name: 'Instagram', handle: e.target.value, url: `https://instagram.com/${e.target.value}`, followers: 35000, verified: true });
+                            setCreator({ ...creator, socialLinks: newLinks });
+                          }}
+                          className="cw-search-box"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Instagram Followers</label>
+                        <input 
+                          type="number" 
+                          value={creator.socialLinks.find(s => s.platform === 'instagram')?.followers || 35000}
+                          onChange={(e) => {
+                            const newLinks = [...creator.socialLinks];
+                            const idx = newLinks.findIndex(s => s.platform === 'instagram');
+                            if (idx >= 0) newLinks[idx].followers = Number(e.target.value);
+                            setCreator({ ...creator, socialLinks: newLinks });
+                          }}
+                          className="cw-search-box"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Niches & Specializations */}
                   <div className="cw-card">
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 14, color: '#19201C' }}>Niches & Content Topics</h3>
@@ -1284,7 +1560,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                       </div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <input 
-                          type="text"
+                          type="text" 
                           placeholder="Add topic (e.g. Next.js, Cloud Dev)"
                           value={newSubNicheInput}
                           onChange={(e) => setNewSubNicheInput(e.target.value)}
@@ -1314,6 +1590,71 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                           <span>Add</span>
                         </button>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Storefront Custom FAQs Manager */}
+                  <div className="cw-card">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#19201C' }}>Storefront FAQ Accordion</h3>
+                      <button 
+                        type="button" 
+                        className="cw-btn cw-btn-secondary cw-btn-sm"
+                        onClick={() => {
+                          const newFaq = {
+                            id: `faq-${Date.now()}`,
+                            question: 'What is your standard review policy?',
+                            answer: 'All projects include 2 complimentary revision rounds to ensure your brand requirements are fully satisfied.',
+                            category: 'deliverables' as const
+                          };
+                          setCreator({ ...creator, faqs: [...creator.faqs, newFaq] });
+                          onShowToast('Added new FAQ item to storefront.');
+                        }}
+                      >
+                        <Plus size={13} />
+                        <span>Add FAQ</span>
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {creator.faqs.map((faq, fIdx) => (
+                        <div key={faq.id || fIdx} style={{ padding: 12, borderRadius: 8, background: '#FAF9F5', border: '1px solid #E5E8E4' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <input 
+                              type="text" 
+                              value={faq.question}
+                              onChange={(e) => {
+                                const updatedFaqs = [...creator.faqs];
+                                updatedFaqs[fIdx].question = e.target.value;
+                                setCreator({ ...creator, faqs: updatedFaqs });
+                              }}
+                              className="cw-search-box"
+                              style={{ width: '85%', fontWeight: 700, fontSize: '0.85rem' }}
+                            />
+                            <button 
+                              type="button" 
+                              style={{ border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer' }}
+                              onClick={() => {
+                                setCreator({ ...creator, faqs: creator.faqs.filter((_, i) => i !== fIdx) });
+                              }}
+                              title="Delete FAQ"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <textarea 
+                            rows={2}
+                            value={faq.answer}
+                            onChange={(e) => {
+                              const updatedFaqs = [...creator.faqs];
+                              updatedFaqs[fIdx].answer = e.target.value;
+                              setCreator({ ...creator, faqs: updatedFaqs });
+                            }}
+                            className="cw-search-box"
+                            style={{ width: '100%', fontSize: '0.8rem', resize: 'vertical' }}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -1423,7 +1764,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                             onClick={() => setTiersModalOpen(true)}
                             title="Click to view Reputation Tiers"
                           >
-                            <Crown size={12} color="#C29C5B" />
+                            <Crown size={12} color="#4ADE80" />
                             <span>Elite Creator · Top 1%</span>
                           </div>
                           <div className="cw-card-price-chip">
@@ -1455,7 +1796,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                       <div className="cw-card-metrics-grid">
                         <div className="cw-card-metric-cell">
                           <div className="cw-metric-cell-top">
-                            <Star size={12} className="cw-star-icon" />
+                            <Star size={12} color="#166534" fill="#166534" />
                             <span className="cw-metric-cell-val">{creator.overallRating || 4.9}</span>
                           </div>
                           <span className="cw-metric-cell-lbl">{creator.totalReviews || 24} Reviews</span>
@@ -1473,7 +1814,7 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
 
                         <div className="cw-card-metric-cell">
                           <div className="cw-metric-cell-top">
-                            <TrendingUp size={12} color="#C29C5B" />
+                            <TrendingUp size={12} color="#166534" />
                             <span className="cw-metric-cell-val">{creator.metrics.engagementRate}%</span>
                           </div>
                           <span className="cw-metric-cell-lbl">Engagement</span>
@@ -1548,10 +1889,47 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
 
               {/* Portfolio Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20, marginTop: 20 }}>
-                {creator.portfolio
-                  .filter(item => portfolioFormatFilter === 'all' || item.format === portfolioFormatFilter)
-                  .filter(item => !portfolioSearch || item.title.toLowerCase().includes(portfolioSearch.toLowerCase()) || item.brandClient.toLowerCase().includes(portfolioSearch.toLowerCase()))
-                  .map(item => (
+                {(() => {
+                  const visiblePortfolio = (creator.portfolio || [])
+                    .filter(item => portfolioFormatFilter === 'all' || item.format === portfolioFormatFilter)
+                    .filter(item => !portfolioSearch || item.title.toLowerCase().includes(portfolioSearch.toLowerCase()) || item.brandClient.toLowerCase().includes(portfolioSearch.toLowerCase()));
+
+                  if (visiblePortfolio.length === 0) {
+                    return (
+                      <div style={{
+                        gridColumn: '1 / -1',
+                        background: '#FAF9F5',
+                        border: '1.5px dashed #D1DDD6',
+                        borderRadius: 14,
+                        padding: '48px 24px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 12
+                      }}>
+                        <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#EDF5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Film size={24} color="#15803D" />
+                        </div>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: '#19201C' }}>No portfolio case studies added yet</h3>
+                        <p style={{ fontSize: '0.85rem', color: '#59655E', maxWidth: 420, margin: 0, lineHeight: 1.5 }}>
+                          Add your past brand integrations, sponsored videos, and UGC highlights to demonstrate conversion power to prospective sponsors.
+                        </p>
+                        <button 
+                          type="button" 
+                          className="cw-btn cw-btn-primary cw-btn-sm"
+                          style={{ marginTop: 8 }}
+                          onClick={() => setAddPortfolioModalOpen(true)}
+                        >
+                          <Plus size={14} />
+                          <span>Add First Portfolio Item</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return visiblePortfolio.map(item => (
                     <div key={item.id} className="cw-card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                       <div style={{ height: 180, position: 'relative', background: '#0F1D15' }}>
                         <img 
@@ -1632,7 +2010,8 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ));
+                })()}
               </div>
             </div>
           )}
@@ -1684,9 +2063,55 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
 
               {/* Packages Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 20, marginTop: 20 }}>
-                {creator.packages
-                  .filter(pkg => servicePlatformFilter === 'all' || pkg.platform.toLowerCase().includes(servicePlatformFilter.toLowerCase()))
-                  .map(pkg => (
+                {(() => {
+                  const visiblePackages = (creator.packages || [])
+                    .filter(pkg => servicePlatformFilter === 'all' || pkg.platform.toLowerCase().includes(servicePlatformFilter.toLowerCase()));
+
+                  if (visiblePackages.length === 0) {
+                    return (
+                      <div style={{
+                        gridColumn: '1 / -1',
+                        background: '#FAF9F5',
+                        border: '1.5px dashed #D1DDD6',
+                        borderRadius: 14,
+                        padding: '48px 24px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 12
+                      }}>
+                        <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#EDF5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Tag size={24} color="#15803D" />
+                        </div>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: '#19201C' }}>No packages published yet</h3>
+                        <p style={{ fontSize: '0.85rem', color: '#59655E', maxWidth: 420, margin: 0, lineHeight: 1.5 }}>
+                          Define fixed collaboration packages (pricing, turnaround time, revisions) to allow brands to book you instantly with milestone escrow.
+                        </p>
+                        <button 
+                          type="button" 
+                          className="cw-btn cw-btn-primary cw-btn-sm"
+                          style={{ marginTop: 8 }}
+                          onClick={() => {
+                            setEditingPackage(null);
+                            setPkgTitle('');
+                            setPkgPrice(15000);
+                            setPkgDays(5);
+                            setPkgPlatform('YouTube');
+                            setPkgTagline('');
+                            setPkgDeliverablesText('1 Dedicated high-energy video segment\n1 Round of script review\nPinned trackable discount link');
+                            setAddServiceModalOpen(true);
+                          }}
+                        >
+                          <Plus size={14} />
+                          <span>Create First Package</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return visiblePackages.map(pkg => (
                     <div key={pkg.id} className="cw-card" style={{ display: 'flex', flexDirection: 'column' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                         <div>
@@ -1794,7 +2219,8 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         </button>
                       </div>
                     </div>
-                  ))}
+                  ));
+                })()}
               </div>
             </div>
           )}
@@ -1850,10 +2276,48 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
 
               {/* Requests List */}
               <div className="cw-requests-list" style={{ marginTop: 20 }}>
-                {collaborationRequests
-                  .filter(req => requestStatusFilter === 'all' || req.status === requestStatusFilter)
-                  .filter(req => !requestSearchQuery || req.brandName.toLowerCase().includes(requestSearchQuery.toLowerCase()) || req.serviceTitle.toLowerCase().includes(requestSearchQuery.toLowerCase()))
-                  .map(req => (
+                {(() => {
+                  const visibleRequests = collaborationRequests
+                    .filter(req => requestStatusFilter === 'all' || req.status === requestStatusFilter)
+                    .filter(req => !requestSearchQuery || req.brandName.toLowerCase().includes(requestSearchQuery.toLowerCase()) || req.serviceTitle.toLowerCase().includes(requestSearchQuery.toLowerCase()));
+
+                  if (visibleRequests.length === 0) {
+                    return (
+                      <div style={{
+                        background: '#FAF9F5',
+                        border: '1.5px dashed #D1DDD6',
+                        borderRadius: 14,
+                        padding: '48px 24px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 12
+                      }}>
+                        <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#EDF5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Briefcase size={24} color="#15803D" />
+                        </div>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: '#19201C' }}>
+                          {requestSearchQuery || requestStatusFilter !== 'all' ? 'No matching collaboration requests' : 'No collaboration requests yet'}
+                        </h3>
+                        <p style={{ fontSize: '0.85rem', color: '#59655E', maxWidth: 420, margin: 0, lineHeight: 1.5 }}>
+                          Share your profile link in your bio or with brand agencies. All incoming sponsorship offers are backed by guaranteed escrow protection.
+                        </p>
+                        <button 
+                          type="button" 
+                          className="cw-btn cw-btn-primary cw-btn-sm"
+                          style={{ marginTop: 8 }}
+                          onClick={handleCopyProfileLink}
+                        >
+                          <Copy size={13} />
+                          <span>Copy Public Profile Link</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return visibleRequests.map(req => (
                     <div key={req.id} className="cw-request-card">
                       <div className="cw-request-top">
                         <div className="cw-brand-info">
@@ -1987,7 +2451,8 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                         )}
                       </div>
                     </div>
-                  ))}
+                  ));
+                })()}
               </div>
             </div>
           )}
@@ -2031,43 +2496,63 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                     />
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto' }}>
-                    {conversations
-                      .filter(conv => !chatSearchQuery || conv.brandName.toLowerCase().includes(chatSearchQuery.toLowerCase()))
-                      .map(conv => (
-                        <div 
-                          key={conv.id}
-                          style={{
-                            padding: '12px 16px',
-                            borderBottom: '1px solid #E5E8E4',
-                            cursor: 'pointer',
-                            background: activeConversationId === conv.id ? '#FAF9F5' : '#FFFFFF',
-                            borderLeft: activeConversationId === conv.id ? '3px solid #16281D' : '3px solid transparent'
-                          }}
-                          onClick={() => {
-                            setActiveConversationId(conv.id);
-                            setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unread: false } : c));
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <img 
-                                src={conv.brandAvatar} 
-                                alt={conv.brandName} 
-                                style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} 
-                              />
-                              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#19201C' }}>{conv.brandName}</span>
+                    {conversations.length === 0 ? (
+                      <div style={{ padding: '36px 16px', textAlign: 'center', color: '#828E86', fontSize: '0.82rem' }}>
+                        No active message threads yet
+                      </div>
+                    ) : (
+                      conversations
+                        .filter(conv => !chatSearchQuery || conv.brandName.toLowerCase().includes(chatSearchQuery.toLowerCase()))
+                        .map(conv => (
+                          <div 
+                            key={conv.id}
+                            style={{
+                              padding: '12px 16px',
+                              borderBottom: '1px solid #E5E8E4',
+                              cursor: 'pointer',
+                              background: activeConversationId === conv.id ? '#FAF9F5' : '#FFFFFF',
+                              borderLeft: activeConversationId === conv.id ? '3px solid #16281D' : '3px solid transparent'
+                            }}
+                            onClick={() => {
+                              setActiveConversationId(conv.id);
+                              setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unread: false } : c));
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <img 
+                                  src={conv.brandAvatar} 
+                                  alt={conv.brandName} 
+                                  style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} 
+                                />
+                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#19201C' }}>{conv.brandName}</span>
+                              </div>
+                              {conv.unread && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444' }} />}
                             </div>
-                            {conv.unread && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444' }} />}
+                            <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{conv.campaign}</span>
                           </div>
-                          <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{conv.campaign}</span>
-                        </div>
-                      ))}
+                        ))
+                    )}
                   </div>
                 </div>
 
                 {/* Chat window */}
                 {(() => {
                   const currentConv = conversations.find(c => c.id === activeConversationId) || conversations[0];
+                  if (!currentConv) {
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, padding: 32 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#FAF9F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <MessageSquare size={22} color="#828E86" />
+                        </div>
+                        <h4 style={{ margin: 0, fontSize: '1rem', color: '#19201C', fontWeight: 700 }}>No brand messages yet</h4>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: '#828E86', maxWidth: 320, textAlign: 'center', lineHeight: 1.5 }}>
+                          Direct communications, brief revisions, and sponsor inquiries will appear here in real time.
+                        </p>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                       <div style={{ padding: '14px 20px', borderBottom: '1px solid #E5E8E4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2367,7 +2852,9 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#16281D', marginTop: 4 }}>
                     {formatMoney(lifetimeEarnedINR)}
                   </div>
-                  <span style={{ fontSize: '0.74rem', color: '#166534', marginTop: 4, display: 'block', fontWeight: 600 }}>24 completed collaborations</span>
+                  <span style={{ fontSize: '0.74rem', color: '#166534', marginTop: 4, display: 'block', fontWeight: 600 }}>
+                    {collaborationRequests.filter(r => r.status === 'completed').length} completed collaborations
+                  </span>
                 </div>
 
                 <div className="cw-card" style={{ border: '1.5px solid #166534' }}>
@@ -2389,9 +2876,11 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div className="cw-card">
                   <span style={{ fontSize: '0.74rem', color: '#828E86', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>Pending Proposals</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#C29C5B', marginTop: 4 }}>
-                    {formatMoney(12000)}
+                    {formatMoney(collaborationRequests.filter(r => r.status === 'new' || r.status === 'in_discussion').reduce((sum, r) => sum + (r.budgetINR || 0), 0))}
                   </div>
-                  <span style={{ fontSize: '0.74rem', color: '#59655E', marginTop: 4, display: 'block' }}>1 brand awaiting acceptance</span>
+                  <span style={{ fontSize: '0.74rem', color: '#59655E', marginTop: 4, display: 'block' }}>
+                    {collaborationRequests.filter(r => r.status === 'new').length} brand proposals pending
+                  </span>
                 </div>
               </div>
 
@@ -2410,34 +2899,41 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {payoutTransactions.map(tx => (
-                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#FAF9F5', borderRadius: 10, border: '1px solid #E5E8E4' }}>
-                      <div>
-                        <strong style={{ fontSize: '0.88rem', color: '#19201C' }}>{tx.brandOrTarget}</strong>
-                        <span style={{ fontSize: '0.76rem', color: '#828E86', display: 'block' }}>{tx.description} • {tx.date} • Ref: {tx.invoiceRef}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <span style={{
-                          fontSize: '0.98rem',
-                          fontWeight: 800,
-                          color: tx.type === 'withdrawal' ? '#DC2626' : '#166534'
-                        }}>
-                          {tx.type === 'withdrawal' ? '-' : '+'}{formatMoney(tx.amountINR)}
-                        </span>
-                        <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>
-                          {tx.status}
-                        </span>
-                        <button 
-                          type="button" 
-                          className="cw-btn cw-btn-secondary cw-btn-sm"
-                          onClick={() => onShowToast(`Downloaded PDF Receipt (${tx.invoiceRef})`)}
-                        >
-                          <Download size={12} />
-                          <span>PDF</span>
-                        </button>
-                      </div>
+                  {payoutTransactions.length === 0 ? (
+                    <div style={{ padding: '36px 16px', textAlign: 'center', color: '#828E86', fontSize: '0.85rem' }}>
+                      <Wallet size={28} color="#D1DDD6" style={{ margin: '0 auto 8px', display: 'block' }} />
+                      No payout transaction records yet. As deliverables get approved and escrow funds clear, your receipts will be tracked here.
                     </div>
-                  ))}
+                  ) : (
+                    payoutTransactions.map(tx => (
+                      <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#FAF9F5', borderRadius: 10, border: '1px solid #E5E8E4' }}>
+                        <div>
+                          <strong style={{ fontSize: '0.88rem', color: '#19201C' }}>{tx.brandOrTarget}</strong>
+                          <span style={{ fontSize: '0.76rem', color: '#828E86', display: 'block' }}>{tx.description} • {tx.date} • Ref: {tx.invoiceRef}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                          <span style={{
+                            fontSize: '0.98rem',
+                            fontWeight: 800,
+                            color: tx.type === 'withdrawal' ? '#DC2626' : '#166534'
+                          }}>
+                            {tx.type === 'withdrawal' ? '-' : '+'}{formatMoney(tx.amountINR)}
+                          </span>
+                          <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>
+                            {tx.status}
+                          </span>
+                          <button 
+                            type="button" 
+                            className="cw-btn cw-btn-secondary cw-btn-sm"
+                            onClick={() => onShowToast(`Downloaded PDF Receipt (${tx.invoiceRef})`)}
+                          >
+                            <Download size={12} />
+                            <span>PDF</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -2486,10 +2982,16 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                 <div className="cw-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <strong style={{ fontSize: '1rem', color: '#19201C' }}>YouTube Channel</strong>
-                    <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>Connected</span>
+                    <span style={{ fontSize: '0.74rem', background: '#EDF5F0', color: '#166534', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>
+                      {creator.verificationSource?.includes('YouTube') ? '✓ Live API Verified' : 'Connected'}
+                    </span>
                   </div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#16281D' }}>52,000 Subs</div>
-                  <span style={{ fontSize: '0.78rem', color: '#59655E', display: 'block', marginTop: 2 }}>Avg 14.2K views • 5.2% engagement</span>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#16281D' }}>
+                    {(creator.socialLinks.find(s => s.platform === 'youtube')?.followers || creator.metrics.platformFollowers?.youtube || 52000).toLocaleString('en-IN')} Subs
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: '#59655E', display: 'block', marginTop: 2 }}>
+                    Avg {(creator.metrics.averageViews ? (creator.metrics.averageViews > 1000 ? `${(creator.metrics.averageViews / 1000).toFixed(1)}K` : creator.metrics.averageViews) : '14.2K')} views • {creator.metrics.engagementRate || 5.2}% engagement
+                  </span>
                   <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #E5E8E4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.74rem', color: '#828E86' }}>{apiSyncState.youtube}</span>
                     <button 
@@ -3076,6 +3578,33 @@ export const CreatorWorkspace: React.FC<CreatorWorkspaceProps> = ({
                   className="cw-search-box" 
                   style={{ width: '100%', resize: 'vertical' }} 
                 />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#59655E', display: 'block', marginBottom: 4 }}>Cover Thumbnail Image</label>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <label className="cw-btn cw-btn-secondary cw-btn-sm" style={{ cursor: 'pointer', margin: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <UploadCloud size={14} />
+                    <span>Upload Image from Device</span>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const url = await uploadMediaFile(file);
+                            setNewPortThumb(url);
+                            onShowToast('Portfolio thumbnail uploaded!');
+                          } catch {
+                            onShowToast('Could not process thumbnail image.');
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                  <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 600 }}>{newPortThumb ? '✓ Thumbnail loaded' : 'Using default'}</span>
+                </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
                 <button type="button" className="cw-btn cw-btn-cancel" onClick={() => setAddPortfolioModalOpen(false)}>

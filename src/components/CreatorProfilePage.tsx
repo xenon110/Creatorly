@@ -24,7 +24,8 @@ import {
   LayoutDashboard,
   Pause,
   LogIn,
-  LogOut
+  LogOut,
+  Building2
 } from 'lucide-react';
 
 interface CreatorProfilePageProps {
@@ -443,36 +444,87 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             <button type="button" onClick={() => scrollToSection('more-creators')}>More creators</button>
           </nav>
 
-          {/* Right actions: Role Portals (Brand & Creator) + Login / Logout + Work together */}
+          {/* Right actions: Role Portals (Brand & Creator) + Login / Logout + Create Account + Work together */}
           <div className="fresh-nav-actions">
             {currentUser ? (
               <div className="nav-portal-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {currentUser.role === 'creator' ? (
-                  <button
-                    type="button"
-                    className="nav-btn-portal nav-btn-creator"
-                    onClick={() => {
-                      if (onNavigateToWorkspace) onNavigateToWorkspace();
-                    }}
-                    title="Enter Creator Workspace"
-                    aria-label="Creator Workspace"
-                  >
-                    <LayoutDashboard size={13} />
-                    <span>Workspace</span>
-                  </button>
+                  <>
+                    <div 
+                      className="nav-user-chip" 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '7px', 
+                        padding: '4px 10px', 
+                        borderRadius: '9999px', 
+                        background: 'rgba(22,40,29,0.06)', 
+                        border: '1px solid rgba(22,40,29,0.15)' 
+                      }}
+                      title={`Logged in as ${currentUser.name}`}
+                    >
+                      <img 
+                        src={currentUser.avatarUrl || '/images/alex-sharma.jpg'} 
+                        alt={currentUser.name} 
+                        style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} 
+                      />
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#16281D' }}>
+                        {currentUser.name.split(' ')[0]}
+                      </span>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 5px', borderRadius: '4px', background: '#16281D', color: '#FFFFFF', textTransform: 'uppercase' }}>
+                        Creator
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="nav-btn-portal nav-btn-creator"
+                      onClick={() => {
+                        if (onNavigateToWorkspace) onNavigateToWorkspace();
+                      }}
+                      title="Enter Creator Workspace"
+                      aria-label="Creator Workspace"
+                    >
+                      <LayoutDashboard size={13} />
+                      <span>Workspace</span>
+                    </button>
+                  </>
                 ) : (
-                  <button
-                    type="button"
-                    className="nav-btn-portal nav-btn-brand"
-                    onClick={() => {
-                      if (onNavigateToMarketplace) onNavigateToMarketplace();
-                    }}
-                    title="Enter Brand Marketplace"
-                    aria-label="Brand Marketplace"
-                  >
-                    <Compass size={13} />
-                    <span>Discover</span>
-                  </button>
+                  <>
+                    <div 
+                      className="nav-user-chip" 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '7px', 
+                        padding: '4px 10px', 
+                        borderRadius: '9999px', 
+                        background: 'rgba(30,58,138,0.06)', 
+                        border: '1px solid rgba(30,58,138,0.15)' 
+                      }}
+                      title={`Logged in as ${currentUser.companyName || currentUser.name}`}
+                    >
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1E3A8A' }}>
+                        {(currentUser.companyName || currentUser.name).split(' ')[0]}
+                      </span>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 5px', borderRadius: '4px', background: '#1E3A8A', color: '#FFFFFF', textTransform: 'uppercase' }}>
+                        Brand
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="nav-btn-portal nav-btn-brand"
+                      onClick={() => {
+                        if (onNavigateToMarketplace) onNavigateToMarketplace();
+                      }}
+                      title="Enter Brand Marketplace"
+                      aria-label="Brand Marketplace"
+                    >
+                      <Compass size={13} />
+                      <span>Discover</span>
+                    </button>
+                  </>
                 )}
 
                 <button
@@ -483,11 +535,11 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                   style={{ fontSize: '0.82rem', padding: '7px 14px' }}
                 >
                   <LogOut size={13} />
-                  <span>Log out ({currentUser.name?.split(' ')[0] || 'User'})</span>
+                  <span>Log out</span>
                 </button>
               </div>
             ) : (
-              <div className="nav-portal-group" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div className="nav-portal-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
                   type="button"
                   className="nav-btn-portal nav-btn-brand"
@@ -495,11 +547,25 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                     if (onNavigateToMarketplace) onNavigateToMarketplace();
                     else if (_onBackToMarketplace) _onBackToMarketplace();
                   }}
-                  title="Enter Brand / Client Discovery Marketplace"
-                  aria-label="Brand Marketplace"
+                  title="Explore creators, audience metrics & transparent rates"
+                  aria-label="Find Creators & Rates"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 14px',
+                    borderRadius: '9999px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    background: 'rgba(21, 128, 61, 0.08)',
+                    color: '#15803D',
+                    border: '1px solid rgba(21, 128, 61, 0.25)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
-                  <Compass size={13} />
-                  <span>For Brands</span>
+                  <Compass size={14} />
+                  <span>Find Creators & Rates</span>
                 </button>
 
                 <button
@@ -508,11 +574,25 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                   onClick={() => {
                     if (onNavigateToWorkspace) onNavigateToWorkspace();
                   }}
-                  title="Enter Creator Workspace"
-                  aria-label="Creator Workspace"
+                  title="Register your details, connect socials & list rate cards"
+                  aria-label="Join as Creator"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 14px',
+                    borderRadius: '9999px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    background: '#16281D',
+                    color: '#FFFFFF',
+                    border: '1px solid #16281D',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
-                  <LayoutDashboard size={13} />
-                  <span>For Creators</span>
+                  <Sparkles size={14} color="#4ADE80" />
+                  <span>Join as Creator</span>
                 </button>
 
                 <button
@@ -540,6 +620,111 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Logged in User Status Banner (Reflects account across storefront) */}
+      {currentUser && (
+        <div className="fresh-content-container" style={{ paddingTop: '16px' }}>
+          {currentUser.role === 'creator' ? (
+            <div style={{
+              background: 'linear-gradient(90deg, #16281D 0%, #1e3a29 100%)',
+              color: '#FFFFFF',
+              padding: '12px 20px',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              boxShadow: '0 4px 14px rgba(22, 40, 29, 0.12)',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <img 
+                  src={currentUser.avatarUrl || '/images/alex-sharma.jpg'} 
+                  alt={currentUser.name} 
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #5EEAD4' }} 
+                />
+                <div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>Welcome back, {currentUser.name}!</span>
+                    <span style={{ fontSize: '0.7rem', background: '#059669', padding: '1px 6px', borderRadius: '4px', color: '#FFF' }}>✓ Verified Creator</span>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: '#A7F3D0' }}>
+                    Your creator account is live and saved in database. Direct deals & inquiries sync in real time.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateToWorkspace && onNavigateToWorkspace()}
+                style={{
+                  background: '#FFFFFF',
+                  color: '#16281D',
+                  border: 'none',
+                  padding: '7px 16px',
+                  borderRadius: '9999px',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>Creator Workspace</span>
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+          ) : (
+            <div style={{
+              background: 'linear-gradient(90deg, #1E3A8A 0%, #1e40af 100%)',
+              color: '#FFFFFF',
+              padding: '12px 20px',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              boxShadow: '0 4px 14px rgba(30, 58, 138, 0.12)',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Building2 size={18} color="#FFFFFF" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>Welcome back, {currentUser.companyName || currentUser.name}!</span>
+                    <span style={{ fontSize: '0.7rem', background: '#2563EB', padding: '1px 6px', borderRadius: '4px', color: '#FFF' }}>✓ Brand Partner</span>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: '#BFDBFE' }}>
+                    Logged in as brand user. Direct booking briefs are pre-filled with milestone escrow protection.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateToMarketplace && onNavigateToMarketplace()}
+                style={{
+                  background: '#FFFFFF',
+                  color: '#1E3A8A',
+                  border: 'none',
+                  padding: '7px 16px',
+                  borderRadius: '9999px',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>Discover Creators</span>
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ========================================================= */}
       {/* SECTION 1: CREATOR HERO (Photo 1)                         */}
@@ -618,16 +803,16 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             <div className="hero-meta-row">
               <div className="meta-item">
                 <MapPin size={14} className="meta-icon" />
-                <span>{isSpecificCreator ? `${creator.location.city}, ${creator.location.country}` : 'Mumbai, Delhi & Global'}</span>
+                <span>{isSpecificCreator ? `${creator?.location?.city || 'Mumbai'}, ${creator?.location?.country || 'India'}` : 'Mumbai, Delhi & Global'}</span>
               </div>
               <div className="meta-item">
-                <span>{isSpecificCreator ? (creator.languages?.join(' & ') || 'English & Hindi') : 'English, Hindi & 10+ Languages'}</span>
+                <span>{isSpecificCreator ? (creator?.languages?.join(' & ') || 'English & Hindi') : 'English, Hindi & 10+ Languages'}</span>
               </div>
             </div>
 
             {/* Social Links */}
             <div className="hero-socials-row">
-              {creator.socialLinks.map((link) => (
+              {(creator?.socialLinks || []).map((link) => (
                 <a
                   key={link.platform}
                   href={link.url}
@@ -1534,6 +1719,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             setPreselectedPackage(null);
             if (onOpenPipeline) onOpenPipeline();
           }}
+          currentUser={currentUser}
         />
       )}
 
@@ -1544,6 +1730,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           creator={creator}
           onShowToast={onShowToast}
           onMessageSubmitted={onMessageSubmitted}
+          currentUser={currentUser}
         />
       )}
 
